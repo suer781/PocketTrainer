@@ -1,0 +1,44 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# C++
+*.o
+*.so
+*.dylib
+*.a
+
+# Build
+cmake-build-*/
+build/
+
+# Models
+*.gguf
+*.bin
+*.safetensors
+
+# Data
+*.jsonl
+*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys
+*.jks
+*.keystore
