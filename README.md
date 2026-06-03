@@ -8,12 +8,14 @@
 
 ![Android](https://img.shields.io/badge/Platform-Android%2012%2B-green)
 ![C++](https://img.shields.io/badge/Core-C%2B%2B-blue)
-![License](https://img.shields.io/badge/License-Apache%202.0-orange)
+![License](https://img.shields.io/badge/License-GPL%20v3-orange)
 ![Status](https://img.shields.io/badge/Status-Active%20Development-yellow)
 
 </div>
 
 ---
+
+> ⚠️ **声明**：本项目处于早期开发阶段，文档和代码结构尚不完善，后续会持续优化和补充。
 
 ## 📖 这是什么
 
@@ -125,7 +127,7 @@ cd PocketTrainer
 ### 使用
 
 1. **下载模型** — 从 HuggingFace 下载 GGUF 格式的模型（推荐 Qwen2 1.5B Q4_K_M）
-2. **准备数据** — 准备 JSONL 格式的训练数据（每行 `{"text": "..."})`
+2. **准备数据** — 准备 JSONL 格式的训练数据（每行 `{"text": "..."}`)
 3. **配置训练** — 选择 LoRA rank、学习率、epoch 数
 4. **开始训练** — 点击"开始训练"，插上充电器，去睡觉
 5. **测试效果** — 训练完成后直接在对话界面测试
@@ -155,7 +157,7 @@ PocketTrainer/
 │   │   ├── ggml_hooks.h/cpp        # 中间层张量提取
 │   │   ├── training_jni.cpp        # JNI 桥接
 │   │   └── CMakeLists.txt          # 构建配置
-│   ├── java/com/localllm/
+│   ├── java/com/pockettrainer/
 │   │   ├── training/
 │   │   │   ├── NativeTraining.kt   # JNI 封装
 │   │   │   └── TrainingViewModel.kt # UI 状态管理
@@ -172,7 +174,7 @@ PocketTrainer/
 
 ## 🗺️ 开发路线
 
-### Phase 1 — 基础训练 ✅ / 🔄
+### Phase 1 — 基础训练
 - [x] 项目骨架搭建
 - [x] C++ QLoRA 训练引擎框架
 - [x] JNI 桥接层
@@ -215,7 +217,7 @@ PocketTrainer/
 
 ## 📄 许可证
 
-本项目基于 [Apache License 2.0](LICENSE) 开源。
+本项目基于 [GNU General Public License v3.0](LICENSE) 开源。
 
 ---
 
