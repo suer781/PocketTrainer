@@ -1,0 +1,107 @@
+package com.pockettrainer.training
+
+/**
+ * 训练超参数配置 — 每个参数都有默认值和说明
+ */
+data class TrainingConfig(
+    // ── 基础参数 ──
+    val epochs: Int = 1,
+    val batchSize: Int = 1,
+    val learningRate: Float = 2e-5f,
+
+    // ── LoRA 参数 ──
+    val loraRank: Int = 8,
+    val loraAlpha: Float = 16f,
+    val loraDropout: Float = 0.05f,
+
+    // ── 优化器参数 ──
+    val warmupRatio: Float = 0.1f,
+    val weightDecay: Float = 0.01f,
+    val maxGradNorm: Float = 1.0f,
+    val gradAccumSteps: Int = 4,
+
+    // ── 数据参数 ──
+    val maxSeqLen: Int = 128,
+
+    // ── 系统参数 ──
+    val nThreads: Int = 4,
+    val saveSteps: Int = 500,
+    val seed: Int = 42
+)
+
+/**
+ * 参数元数据：名称、范围、说明
+ */
+data class ParamMeta(
+    val key: String,
+    val label: String,
+    val description: String,
+    val hint: String,           // 输入框 placeholder
+    val range: String,          // 建议范围
+    val category: String        // 所属分类
+)
+
+object TrainingParamRegistry {
+    val params = listOf(
+        // ── 基础 ──
+        ParamMeta("epochs", "训练轮数 (Epochs)",
+            "完整遍历一次数据集为 1 个 Epoch。轮数越多学习越充分，但过多会过拟合。小数据集建议 1-3 轮，大数据集 1 轮即可。",
+            "1", "1 ~ 10", "基础参数"),
+
+        ParamMeta("batchSize", "批大小 (Batch Size)",
+            "每次前向传播使用的样本数。增大可提高训练稳定性，但会线性增加显存/内存占用。端侧设备建议 1-2。",
+            "1", "1 ~ 8", "基础参数"),
+
+        ParamMeta("learningRate", "学习率 (Learning Rate)",
+            "控制每次梯度更新的步长。过大会震荡发散，过小收敛极慢。LoRA 微调推荐 1e-5 ~ 5e-5，全量训练更小。",
+            "2e-5", "1e-6 ~ 1e-4", "基础参数"),
+
+        // ── LoRA ──
+        ParamMeta("loraRank", "LoRA 秩 (Rank)",
+            "低秩分解的维度。秩越高可训练参数越多、表达能力越强，但计算量和内存也越大。简单任务 4-8，复杂任务 16-64。",
+            "8", "4 ~ 64", "LoRA 参数"),
+
+        ParamMeta("loraAlpha", "LoRA 缩放因子 (Alpha)",
+            "缩放 LoRA 更新幅度的系数，实际缩放 = alpha / rank。通常设为 rank 的 1-2 倍。值越大 LoRA 对原模型影响越强。",
+            "16", "rank × 1 ~ 2", "LoRA 参数"),
+
+        ParamMeta("loraDropout", "LoRA Dropout",
+            "LoRA 层的随机失活概率，用于防止过拟合。数据量小时可适当增大（0.1-0.3），数据量大可设 0 或很低。",
+            "0.05", "0 ~ 0.3", "LoRA 参数"),
+
+        // ── 优化器 ──
+        ParamMeta("warmupRatio", "预热比例 (Warmup Ratio)",
+            "训练初期学习率从 0 线性升至设定值的步数占比。预热可避免初始梯度过大导致训练不稳定。建议 5%-10%。",
+            "0.1", "0 ~ 0.3", "优化器"),
+
+        ParamMeta("weightDecay", "权重衰减 (Weight Decay)",
+            "L2 正则化系数，对大权重施加惩罚以防止过拟合。推荐 0.01，设为 0 则关闭正则化。",
+            "0.01", "0 ~ 0.1", "优化器"),
+
+        ParamMeta("maxGradNorm", "梯度裁剪 (Max Grad Norm)",
+            "梯度的最大 L2 范数，超过则等比缩放。防止梯度爆炸，对训练稳定性至关重要。1.0 是常用默认值。",
+            "1.0", "0.5 ~ 5.0", "优化器"),
+
+        ParamMeta("gradAccumSteps", "梯度累积步数",
+            "在不增加内存的前提下模拟更大 batch size。实际 batch = batchSize × gradAccumSteps。端侧内存紧张时增大此值。",
+            "4", "1 ~ 32", "优化器"),
+
+        // ── 数据 ──
+        ParamMeta("maxSeqLen", "最大序列长度",
+            "每个训练样本的最大 token 数。越长可捕获更多上下文，但内存消耗平方级增长。端侧建议 64-256。",
+            "128", "32 ~ 512", "数据"),
+
+        // ── 系统 ──
+        ParamMeta("nThreads", "CPU 线程数",
+            "用于训练计算的线程数。建议设为设备大核数（通常 4），超过核心数不会更快反而可能更慢。",
+            "4", "1 ~ 8", "系统"),
+
+        ParamMeta("saveSteps", "保存间隔 (Steps)",
+            "每隔多少步保存一次检查点。设为 0 则只在训练结束时保存一次。频繁保存会占用存储空间。",
+            "500", "0 ~ 2000", "系统"),
+
+        ParamMeta("seed", "随机种子 (Seed)",
+            "固定随机数种子以确保实验可复现。相同种子 + 相同参数 = 相同结果。-1 为随机。",
+            "42", "任意整数", "系统")
+    )
+}
