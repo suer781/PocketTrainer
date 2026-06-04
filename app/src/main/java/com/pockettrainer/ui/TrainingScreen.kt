@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.pockettrainer.training.DataSourceMode
 import com.pockettrainer.training.ModelInfo
 import com.pockettrainer.training.TrainingState
 import com.pockettrainer.training.TrainingViewModel
@@ -27,7 +28,6 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     var showStartDialog by remember { mutableStateOf(false) }
 
-    // 文件选择器
     val modelPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { viewModel.importModelFromUri(it) } }
@@ -46,36 +46,26 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("即将对模型进行微调训练，模型权重将被修改。")
                     if (uiState.systemPrompt.isNotEmpty()) {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        ) {
-                            Text(
-                                "系统提示词将被训练进模型权重",
+                        Card(colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                            Text("系统提示词将被训练进模型权重",
                                 modifier = Modifier.padding(8.dp),
                                 style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium
-                            )
+                                fontWeight = FontWeight.Medium)
                         }
                     }
-                    Text(
-                        "数据集较大时训练时间可能较长，请耐心等待。",
+                    Text("数据集较大时训练时间可能较长，请耐心等待。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "训练过程中请勿关闭应用。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("训练过程中请勿关闭应用。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                        color = MaterialTheme.colorScheme.error)
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    showStartDialog = false
-                    viewModel.startTraining()
-                }) { Text("开始训练") }
+                Button(onClick = { showStartDialog = false; viewModel.startTraining() }) {
+                    Text("开始训练")
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showStartDialog = false }) { Text("取消") }
@@ -91,27 +81,19 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         // 第一步：导入基座模型
         // ══════════════════════════════════════
         item {
-            SectionHeader(step = 1, title = "导入基座模型", subtitle = "Qwen、DeepSeek 等 .safetensors 格式，参数量不限")
+            SectionHeader(1, "导入基座模型", "Qwen、DeepSeek 等 .safetensors 格式，参数量不限")
         }
 
         if (uiState.availableModels.isNotEmpty()) {
             items(uiState.availableModels) { model ->
-                ModelCard(
-                    model = model,
-                    isSelected = model == uiState.selectedModel,
-                    onClick = { viewModel.selectModel(model) }
-                )
+                ModelCard(model, model == uiState.selectedModel) { viewModel.selectModel(model) }
             }
         }
 
         item {
-            Button(
-                onClick = { modelPickerLauncher.launch(arrayOf("*/*")) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Button(onClick = { modelPickerLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("导入模型文件")
+                Spacer(Modifier.width(6.dp)); Text("导入模型文件")
             }
         }
 
@@ -122,53 +104,90 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                         uiState.trainingState in listOf(TrainingState.IDLE, TrainingState.ERROR),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.CloudDownload, null)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    when (uiState.trainingState) {
-                        TrainingState.LOADING -> "加载中..."
-                        TrainingState.READY   -> "重新加载"
-                        else                  -> "加载模型"
+                Icon(Icons.Default.CloudDownload, null); Spacer(Modifier.width(8.dp))
+                Text(when (uiState.trainingState) {
+                    TrainingState.LOADING -> "加载中..."
+                    TrainingState.READY   -> "重新加载"
+                    else -> "加载模型"
+                })
+            }
+        }
+
+        // ══════════════════════════════════════
+        // 第二步：训练数据
+        // ══════════════════════════════════════
+        item {
+            SectionHeader(2, "训练数据", "直接输入文本或导入文件")
+        }
+
+        // 模式切换
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = uiState.dataSourceMode == DataSourceMode.TEXT,
+                    onClick = { viewModel.setDataSourceMode(DataSourceMode.TEXT) },
+                    label = { Text("直接输入") },
+                    leadingIcon = { if (uiState.dataSourceMode == DataSourceMode.TEXT) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                )
+                FilterChip(
+                    selected = uiState.dataSourceMode == DataSourceMode.FILE,
+                    onClick = { viewModel.setDataSourceMode(DataSourceMode.FILE) },
+                    label = { Text("导入文件") },
+                    leadingIcon = { if (uiState.dataSourceMode == DataSourceMode.FILE) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                )
+            }
+        }
+
+        // 文本输入模式
+        if (uiState.dataSourceMode == DataSourceMode.TEXT) {
+            item {
+                OutlinedTextField(
+                    value = uiState.directText,
+                    onValueChange = { viewModel.setDirectText(it) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                    placeholder = { Text("粘贴或输入训练文本...\n\n每段用空行分隔，每段作为一个训练样本") },
+                    supportingText = {
+                        Text(
+                            if (uiState.directText.isEmpty()) "输入要训练进模型的文本内容"
+                            else "${uiState.directText.length} 字符",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 )
             }
         }
 
-        // ══════════════════════════════════════
-        // 第二步：选择数据集
-        // ══════════════════════════════════════
-        item {
-            SectionHeader(step = 2, title = "选择数据集", subtitle = "任何文档格式均可（.txt/.jsonl/.json/.csv 等）")
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable {
-                    datasetPickerLauncher.launch(arrayOf("*/*"))
-                },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (uiState.datasetPath.isNotEmpty())
-                        MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (uiState.datasetPath.isNotEmpty()) Icons.Default.CheckCircle
-                        else Icons.Default.FolderOpen, null,
-                        tint = if (uiState.datasetPath.isNotEmpty()) MaterialTheme.colorScheme.primary
-                               else MaterialTheme.colorScheme.onSurfaceVariant
+        // 文件导入模式
+        if (uiState.dataSourceMode == DataSourceMode.FILE) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        datasetPickerLauncher.launch(arrayOf("*/*"))
+                    },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (uiState.datasetPath.isNotEmpty())
+                            MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            if (uiState.datasetName.isNotEmpty()) uiState.datasetName
-                            else "点击选择数据集文件",
-                            fontWeight = FontWeight.Medium
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (uiState.datasetPath.isNotEmpty()) Icons.Default.CheckCircle
+                            else Icons.Default.FolderOpen, null,
+                            tint = if (uiState.datasetPath.isNotEmpty()) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (uiState.datasetPath.isNotEmpty()) {
-                            Text(uiState.datasetPath, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                if (uiState.datasetName.isNotEmpty()) uiState.datasetName
+                                else "点击选择文件（.txt/.jsonl/.json/.csv 等）",
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (uiState.datasetPath.isNotEmpty()) {
+                                Text(uiState.datasetPath, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
                         }
                     }
                 }
@@ -179,7 +198,7 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         // 第三步：系统提示词（可选）
         // ══════════════════════════════════════
         item {
-            SectionHeader(step = 3, title = "系统提示词（可选）", subtitle = "训练进模型权重，之后无需再传")
+            SectionHeader(3, "系统提示词（可选）", "训练进模型权重，之后无需再传")
         }
 
         item {
@@ -207,14 +226,12 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                 TrainingState.PAUSED, TrainingState.COMPLETED
             )
         ) {
-            item {
-                SectionHeader(step = 4, title = "开始训练", subtitle = null)
-            }
+            item { SectionHeader(4, "开始训练", null) }
 
             item {
                 TrainingControlPanel(
                     uiState = uiState,
-                    onStart = { showStartDialog = true },  // 弹确认框
+                    onStart = { showStartDialog = true },
                     onPause = { viewModel.pauseTraining() },
                     onResume = { viewModel.resumeTraining() },
                     onStop = { viewModel.stopTraining() },
@@ -243,11 +260,7 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
             }
 
             item {
-                LossCurveView(
-                    lossHistory = uiState.lossHistory,
-                    currentLoss = uiState.currentLoss,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                LossCurveView(lossHistory = uiState.lossHistory, currentLoss = uiState.currentLoss, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -258,16 +271,13 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
             ) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Default.Info, null, modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Default.Info, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text("训练结果由用户自行承担。请确保拥有模型和数据的合法使用权。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer)
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                         Text("数据集是否清洗由用户自行决定。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer)
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
             }
@@ -279,11 +289,7 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
 private fun SectionHeader(step: Int, title: String, subtitle: String?) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            ) {
+            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) {
                 Box(contentAlignment = Alignment.Center) {
                     Text("$step", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
                 }
@@ -293,8 +299,7 @@ private fun SectionHeader(step: Int, title: String, subtitle: String?) {
         }
         if (subtitle != null) {
             Text(subtitle, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 32.dp))
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
         }
     }
 }
@@ -337,9 +342,11 @@ fun TrainingControlPanel(
                             enabled = uiState.canStartTraining,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.PlayArrow, null)
-                            Spacer(Modifier.width(4.dp))
-                            Text(if (uiState.datasetPath.isEmpty()) "请先选择数据集" else "开始训练")
+                            Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp))
+                            Text(when {
+                                !uiState.canStartTraining -> "请先输入训练数据"
+                                else -> "开始训练"
+                            })
                         }
                     }
                     TrainingState.RUNNING -> {
@@ -354,7 +361,7 @@ fun TrainingControlPanel(
                         Button(onClick = onResume, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("继续")
                         }
-                OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Stop, null); Spacer(Modifier.width(4.dp)); Text("停止")
                         }
                     }
