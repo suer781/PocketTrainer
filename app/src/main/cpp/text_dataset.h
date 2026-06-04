@@ -23,8 +23,10 @@ namespace pocket_trainer {
  */
 class TextDataset {
 public:
-    TextDataset(const std::string& path, int seq_len, int seed = 42)
-        : seq_len_(seq_len)
+    TextDataset(const std::string& path, int seq_len,
+                 const std::string& system_prompt = "",
+                 int seed = 42)
+        : seq_len_(seq_len), system_prompt_(system_prompt)
     {
         load(path);
         if (token_ids_.empty()) {
@@ -71,6 +73,7 @@ public:
 
 private:
     int seq_len_;
+    std::string system_prompt_;
     std::vector<int32_t> token_ids_;
 
     void load(const std::string& path) {
@@ -88,7 +91,17 @@ private:
         }
 
         // 简单字符级 tokenizer（兼容性最好，不需要词表文件）
+        // 如果有系统提示词，先编码它作为前缀
+        std::vector<int32_t> prompt_ids;
+        if (!system_prompt_.empty()) {
+            for (unsigned char c : system_prompt_) {
+                prompt_ids.push_back(static_cast<int32_t>(c));
+            }
+        }
+
         for (const auto& text : texts) {
+            // 每个样本前注入系统提示词
+            token_ids_.insert(token_ids_.end(), prompt_ids.begin(), prompt_ids.end());
             for (unsigned char c : text) {
                 token_ids_.push_back(static_cast<int32_t>(c));
             }
