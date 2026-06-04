@@ -1,5 +1,6 @@
 package com.pockettrainer.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -7,6 +8,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -14,9 +16,17 @@ import androidx.navigation.NavController
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
-    var nThreads by remember { mutableStateOf(4f) }
-    var useGPU by remember { mutableStateOf(false) }
-    var useBLAS by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("pocket_trainer_settings", Context.MODE_PRIVATE)
+
+    var nThreads by remember { mutableFloatStateOf(prefs.getFloat("nThreads", 4f)) }
+    var useGPU by remember { mutableStateOf(prefs.getBoolean("useGPU", false)) }
+    var useBLAS by remember { mutableStateOf(prefs.getBoolean("useBLAS", true)) }
+
+    // Persist on change
+    LaunchedEffect(nThreads) { prefs.edit().putFloat("nThreads", nThreads).apply() }
+    LaunchedEffect(useGPU) { prefs.edit().putBoolean("useGPU", useGPU).apply() }
+    LaunchedEffect(useBLAS) { prefs.edit().putBoolean("useBLAS", useBLAS).apply() }
 
     LazyColumn(Modifier.fillMaxSize()) {
         item { TopAppBar(title = { Text("设置") }) }
