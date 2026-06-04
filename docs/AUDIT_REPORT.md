@@ -1,8 +1,9 @@
 # PocketTrainer 审计报告
 
 > 审计时间：2026-06-05 01:37
+> 更新时间：2026-06-05 02:01
 > 审计范围：全项目源码（C++ / Kotlin / Gradle / Manifest）
-> CI 状态：编译通过（但存在运行时问题）
+> CI 状态：编译通过
 
 ---
 
@@ -201,6 +202,15 @@ private fun validateModelFile(file: File): Boolean {
 - TrainingForegroundService 有了，但 notification channel 和更新逻辑可能不完整
 
 ---
+
+## 修复记录
+
+| 时间 | # | 修复内容 | CI |
+|------|---|----------|----|
+| 02:01 | 1 | TrainingViewModel 加 exportLora(context) wrapper | ✅ |
+| 02:01 | 2 | SettingsScreen 用 SharedPreferences 持久化 | ✅ |
+| 02:01 | 3 | text_dataset.h 误报，已有字符级 tokenizer | — |
+| 02:01 | 4 | AndroidManifest 加 FOREGROUND_SERVICE_DATA_SYNC 权限 | ✅ |
 
 ## 修复顺序建议
 
