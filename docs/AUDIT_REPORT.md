@@ -211,6 +211,9 @@ private fun validateModelFile(file: File): Boolean {
 | 02:01 | 2 | SettingsScreen 用 SharedPreferences 持久化 | ✅ |
 | 02:01 | 3 | text_dataset.h 误报，已有字符级 tokenizer | — |
 | 02:01 | 4 | AndroidManifest 加 FOREGROUND_SERVICE_DATA_SYNC 权限 | ✅ |
+| 02:03 | 6 | ModelRepository 加 GGUF/SafeTensors magic bytes 校验 | ✅ |
+| 02:03 | 7 | DatasetScreen 误报，已有 OpenDocument 文件选择器 | — |
+| 02:03 | 8 | 新增 app/proguard-rules.pro 保护 JNI 类 | ✅ |
 
 ## 修复顺序建议
 
