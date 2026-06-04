@@ -34,6 +34,9 @@ data class TrainingUiState(
     val dataSourceMode: DataSourceMode = DataSourceMode.TEXT,  // 当前输入模式
     // 系统提示词
     val systemPrompt: String = "",
+    // 训练配置
+    val config: TrainingConfig = TrainingConfig(),
+    val showAdvanced: Boolean = false,
     // 训练状态
     val trainingState: TrainingState = TrainingState.IDLE,
     val errorMessage: String? = null,
@@ -207,17 +210,21 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(systemPrompt = prompt) }
     }
 
+    // ── 训练配置 ──
+
+    fun toggleAdvanced() {
+        _uiState.update { it.copy(showAdvanced = !it.showAdvanced) }
+    }
+
+    fun updateConfig(updater: (TrainingConfig) -> TrainingConfig) {
+        _uiState.update { it.copy(config = updater(it.config)) }
+    }
+
     // ── 训练 ──
 
-    fun startTraining(
-        epochs: Int = 1,
-        batchSize: Int = 1,
-        learningRate: Float = 2e-5f,
-        loraRank: Int = 8,
-        loraAlpha: Float = 16f,
-        nThreads: Int = 4
-    ) {
+    fun startTraining() {
         val state = _uiState.value
+        val cfg = state.config
         // 确定数据集路径：文件模式直接用路径，文本模式先写临时文件
         val dsPath = when {
             state.datasetPath.isNotEmpty() -> state.datasetPath
@@ -279,10 +286,18 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
                 datasetPath = dsPath,
                 outputPath = outputDir.absolutePath,
                 systemPrompt = _uiState.value.systemPrompt,
-                epochs = epochs, batchSize = batchSize,
-                learningRate = learningRate,
-                loraRank = loraRank, loraAlpha = loraAlpha,
-                nThreads = nThreads
+                epochs = cfg.epochs, batchSize = cfg.batchSize,
+                learningRate = cfg.learningRate,
+                loraRank = cfg.loraRank, loraAlpha = cfg.loraAlpha,
+                loraDropout = cfg.loraDropout,
+                warmupRatio = cfg.warmupRatio,
+                weightDecay = cfg.weightDecay,
+                maxGradNorm = cfg.maxGradNorm,
+                gradAccumSteps = cfg.gradAccumSteps,
+                maxSeqLen = cfg.maxSeqLen,
+                nThreads = cfg.nThreads,
+                saveSteps = cfg.saveSteps,
+                seed = cfg.seed
             )
         }
     }
