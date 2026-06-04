@@ -13,12 +13,12 @@ jobs:
 
     steps:
       - name: Checkout with submodules
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Set up Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
 
@@ -36,7 +36,7 @@ jobs:
           echo "ndk.dir=$ANDROID_HOME/ndk/27.2.12479018" >> local.properties
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.11.1'
           validate-wrappers: false
@@ -62,7 +62,7 @@ jobs:
           find app/build/outputs/apk -name "*.apk" -exec unzip -l {} \; 2>/dev/null | grep "\.so" | head -20 || echo "No APK or no .so in APK"
 
       - name: Upload APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: success()
         with:
           name: pockettrainer-debug
