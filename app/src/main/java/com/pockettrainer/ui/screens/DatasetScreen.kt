@@ -65,7 +65,7 @@ fun DatasetScreen(navController: NavController) {
                         Icon(Icons.Default.CloudUpload, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                         Spacer(Modifier.height(12.dp))
                         Text("还没有数据集", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("点击上方"导入"添加训练数据", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        Text("点击上方“导入”添加训练数据", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                     }
                 }
             }
