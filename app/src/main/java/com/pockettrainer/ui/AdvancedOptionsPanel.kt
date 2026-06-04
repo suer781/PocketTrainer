@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.pockettrainer.training.ParamMeta
+import com.pockettrainer.training.ParamType
 import com.pockettrainer.training.TrainingConfig
 import com.pockettrainer.training.TrainingParamRegistry
 
@@ -35,10 +36,7 @@ fun AdvancedOptionsPanel(
         Column {
             // ── 折叠标题栏 ──
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggle)
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -46,12 +44,11 @@ fun AdvancedOptionsPanel(
                     Icon(Icons.Default.Tune, null, modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("高级参数", fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleSmall)
+                    Text("高级参数", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "LoRA r=${config.loraRank} · lr=${formatScientific(config.learningRate)} · bs=${config.batchSize}",
+                        "LoRA r=${config.loraRank} · lr=${formatLR(config.learningRate)} · ${config.schedulerType}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -67,9 +64,8 @@ fun AdvancedOptionsPanel(
             AnimatedVisibility(visible = isExpanded) {
                 Column(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // 按 category 分组
                     val grouped = TrainingParamRegistry.params.groupBy { it.category }
 
                     grouped.forEach { (category, params) ->
@@ -78,8 +74,9 @@ fun AdvancedOptionsPanel(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
                         )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
 
                         params.forEach { meta ->
                             ParamField(meta = meta, config = config, onUpdate = onUpdate)
@@ -99,129 +96,198 @@ private fun ParamField(
 ) {
     var showTooltip by remember { mutableStateOf(false) }
 
-    // 根据 key 获取当前值
-    val currentValue = when (meta.key) {
-        "epochs"           -> config.epochs.toString()
-        "batchSize"        -> config.batchSize.toString()
-        "learningRate"     -> formatScientific(config.learningRate)
-        "loraRank"         -> config.loraRank.toString()
-        "loraAlpha"        -> config.loraAlpha.toString()
-        "loraDropout"      -> config.loraDropout.toString()
-        "warmupRatio"      -> config.warmupRatio.toString()
-        "weightDecay"      -> config.weightDecay.toString()
-        "maxGradNorm"      -> config.maxGradNorm.toString()
-        "gradAccumSteps"   -> config.gradAccumSteps.toString()
-        "maxSeqLen"        -> config.maxSeqLen.toString()
-        "nThreads"         -> config.nThreads.toString()
-        "saveSteps"        -> config.saveSteps.toString()
-        "seed"             -> config.seed.toString()
-        else -> ""
-    }
-
-    Column {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 参数名
-            Text(
-                meta.label,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
+            // 参数名 + 说明按钮
+            Column(modifier = Modifier.weight(1f)) {
+                Text(meta.label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                Text("建议: ${meta.range}", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+            }
 
-            // 输入框
-            OutlinedTextField(
-                value = currentValue,
-                onValueChange = { newVal ->
-                    onUpdate { old ->
-                        when (meta.key) {
-                            "epochs"           -> old.copy(epochs = newVal.toIntOrNull() ?: old.epochs)
-                            "batchSize"        -> old.copy(batchSize = newVal.toIntOrNull() ?: old.batchSize)
-                            "learningRate"     -> old.copy(learningRate = parseScientific(newVal) ?: old.learningRate)
-                            "loraRank"         -> old.copy(loraRank = newVal.toIntOrNull() ?: old.loraRank)
-                            "loraAlpha"        -> old.copy(loraAlpha = newVal.toFloatOrNull() ?: old.loraAlpha)
-                            "loraDropout"      -> old.copy(loraDropout = newVal.toFloatOrNull() ?: old.loraDropout)
-                            "warmupRatio"      -> old.copy(warmupRatio = newVal.toFloatOrNull() ?: old.warmupRatio)
-                            "weightDecay"      -> old.copy(weightDecay = newVal.toFloatOrNull() ?: old.weightDecay)
-                            "maxGradNorm"      -> old.copy(maxGradNorm = newVal.toFloatOrNull() ?: old.maxGradNorm)
-                            "gradAccumSteps"   -> old.copy(gradAccumSteps = newVal.toIntOrNull() ?: old.gradAccumSteps)
-                            "maxSeqLen"        -> old.copy(maxSeqLen = newVal.toIntOrNull() ?: old.maxSeqLen)
-                            "nThreads"         -> old.copy(nThreads = newVal.toIntOrNull() ?: old.nThreads)
-                            "saveSteps"        -> old.copy(saveSteps = newVal.toIntOrNull() ?: old.saveSteps)
-                            "seed"             -> old.copy(seed = newVal.toIntOrNull() ?: old.seed)
-                            else -> old
+            // 根据类型渲染不同控件
+            when (meta.type) {
+                ParamType.BOOL -> {
+                    val checked = when (meta.key) {
+                        "earlyStopping" -> config.earlyStopping
+                        else -> false
+                    }
+                    Switch(
+                        checked = checked,
+                        onCheckedChange = { v ->
+                            onUpdate { old ->
+                                when (meta.key) {
+                                    "earlyStopping" -> old.copy(earlyStopping = v)
+                                    else -> old
+                                }
+                            }
+                        }
+                    )
+                }
+
+                ParamType.DROPDOWN -> {
+                    val current = when (meta.key) {
+                        "schedulerType" -> config.schedulerType
+                        "preprocessing" -> config.preprocessing
+                        else -> ""
+                    }
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedCard(
+                            modifier = Modifier.clickable { expanded = true }.width(160.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(current, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            meta.options.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option, style = MaterialTheme.typography.bodySmall) },
+                                    onClick = {
+                                        expanded = false
+                                        onUpdate { old ->
+                                            when (meta.key) {
+                                                "schedulerType" -> old.copy(schedulerType = option)
+                                                "preprocessing" -> old.copy(preprocessing = option)
+                                                else -> old
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
-                },
-                modifier = Modifier.width(100.dp).height(48.dp),
-                textStyle = MaterialTheme.typography.bodySmall,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (meta.key == "learningRate" || meta.key == "loraAlpha" ||
-                                     meta.key == "loraDropout" || meta.key == "warmupRatio" ||
-                                     meta.key == "weightDecay" || meta.key == "maxGradNorm")
-                        KeyboardType.Decimal else KeyboardType.Number
-                ),
-                trailingIcon = {
-                    IconButton(onClick = { showTooltip = !showTooltip }, modifier = Modifier.size(20.dp)) {
-                        Icon(Icons.Default.HelpOutline, null, modifier = Modifier.size(14.dp))
-                    }
                 }
-            )
-        }
 
-        // 建议范围
-        Text(
-            "建议: ${meta.range}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(start = 4.dp)
-        )
+                ParamType.TEXT -> {
+                    val value = when (meta.key) {
+                        "resumeFromCheckpoint" -> config.resumeFromCheckpoint
+                        else -> ""
+                    }
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { v ->
+                            onUpdate { old ->
+                                when (meta.key) {
+                                    "resumeFromCheckpoint" -> old.copy(resumeFromCheckpoint = v)
+                                    else -> old
+                                }
+                            }
+                        },
+                        modifier = Modifier.width(180.dp).height(44.dp),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        singleLine = true,
+                        placeholder = { Text(meta.hint, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
 
-        // 说明展开
-        AnimatedVisibility(visible = showTooltip) {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Text(
-                    meta.description,
-                    modifier = Modifier.padding(8.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                else -> {
+                    // INT / FLOAT — 数字输入框
+                    val value = getValueForKey(meta.key, config)
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { newVal ->
+                            onUpdate { old -> setValueForKey(meta.key, newVal, old) }
+                        },
+                        modifier = Modifier.width(100.dp).height(44.dp),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (meta.type == ParamType.FLOAT) KeyboardType.Decimal
+                                           else KeyboardType.Number
+                        ),
+                        trailingIcon = {
+                            IconButton(onClick = { showTooltip = !showTooltip }, modifier = Modifier.size(20.dp)) {
+                                Icon(Icons.Default.HelpOutline, null, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    )
+                }
             }
         }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        // 说明气泡
+        AnimatedVisibility(visible = showTooltip) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Text(meta.description, modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+        )
     }
 }
 
-private fun formatScientific(value: Float): String {
-    return when {
-        value == 0f -> "0"
-        value < 0.001f || value >= 100f -> "%.1e".format(value)
-        value < 1f -> "%.0e".format(value).replace("e", "e").let {
-            // format as 2e-5 style
-            val exp = Math.log10(value.toDouble()).toInt()
-            val mantissa = value / Math.pow(10.0, exp.toDouble()).toFloat()
-            "%.0fe%d".format(mantissa, exp)
-        }
-        else -> "%.4f".format(value)
-    }
+// ── 工具函数 ──
+
+private fun getValueForKey(key: String, config: TrainingConfig): String = when (key) {
+    "epochs"           -> config.epochs.toString()
+    "batchSize"        -> config.batchSize.toString()
+    "learningRate"     -> formatLR(config.learningRate)
+    "loraRank"         -> config.loraRank.toString()
+    "loraAlpha"        -> config.loraAlpha.toString()
+    "loraDropout"      -> config.loraDropout.toString()
+    "warmupRatio"      -> config.warmupRatio.toString()
+    "weightDecay"      -> config.weightDecay.toString()
+    "maxGradNorm"      -> config.maxGradNorm.toString()
+    "gradAccumSteps"   -> config.gradAccumSteps.toString()
+    "maxSeqLen"        -> config.maxSeqLen.toString()
+    "valSplit"         -> config.valSplit.toString()
+    "earlyStoppingPatience"  -> config.earlyStoppingPatience.toString()
+    "earlyStoppingMinDelta"  -> config.earlyStoppingMinDelta.toString()
+    "saveTotalLimit"   -> config.saveTotalLimit.toString()
+    "nThreads"         -> config.nThreads.toString()
+    "saveSteps"        -> config.saveSteps.toString()
+    "seed"             -> config.seed.toString()
+    else -> ""
 }
 
-private fun parseScientific(s: String): Float? {
-    return try {
-        // 支持 2e-5, 2E-5, 0.00002 等格式
-        s.trim().toFloatOrNull() ?: run {
-            val clean = s.lowercase().replace("f", "")
-            clean.toFloatOrNull()
-        }
-    } catch (_: Exception) { null }
+private fun setValueForKey(key: String, raw: String, old: TrainingConfig): TrainingConfig = when (key) {
+    "epochs"           -> old.copy(epochs = raw.toIntOrNull() ?: old.epochs)
+    "batchSize"        -> old.copy(batchSize = raw.toIntOrNull() ?: old.batchSize)
+    "learningRate"     -> old.copy(learningRate = parseLR(raw) ?: old.learningRate)
+    "loraRank"         -> old.copy(loraRank = raw.toIntOrNull() ?: old.loraRank)
+    "loraAlpha"        -> old.copy(loraAlpha = raw.toFloatOrNull() ?: old.loraAlpha)
+    "loraDropout"      -> old.copy(loraDropout = raw.toFloatOrNull() ?: old.loraDropout)
+    "warmupRatio"      -> old.copy(warmupRatio = raw.toFloatOrNull() ?: old.warmupRatio)
+    "weightDecay"      -> old.copy(weightDecay = raw.toFloatOrNull() ?: old.weightDecay)
+    "maxGradNorm"      -> old.copy(maxGradNorm = raw.toFloatOrNull() ?: old.maxGradNorm)
+    "gradAccumSteps"   -> old.copy(gradAccumSteps = raw.toIntOrNull() ?: old.gradAccumSteps)
+    "maxSeqLen"        -> old.copy(maxSeqLen = raw.toIntOrNull() ?: old.maxSeqLen)
+    "valSplit"         -> old.copy(valSplit = raw.toFloatOrNull() ?: old.valSplit)
+    "earlyStoppingPatience"  -> old.copy(earlyStoppingPatience = raw.toIntOrNull() ?: old.earlyStoppingPatience)
+    "earlyStoppingMinDelta"  -> old.copy(earlyStoppingMinDelta = raw.toFloatOrNull() ?: old.earlyStoppingMinDelta)
+    "saveTotalLimit"   -> old.copy(saveTotalLimit = raw.toIntOrNull() ?: old.saveTotalLimit)
+    "nThreads"         -> old.copy(nThreads = raw.toIntOrNull() ?: old.nThreads)
+    "saveSteps"        -> old.copy(saveSteps = raw.toIntOrNull() ?: old.saveSteps)
+    "seed"             -> old.copy(seed = raw.toIntOrNull() ?: old.seed)
+    else -> old
 }
+
+private fun formatLR(value: Float): String = when {
+    value == 0f -> "0"
+    value < 0.001f -> "%.0e".format(value).let {
+        val exp = kotlin.math.log10(value.toDouble()).toInt()
+        val mantissa = value / Math.pow(10.0, exp.toDouble()).toFloat()
+        "%.0fe%d".format(mantissa, exp)
+    }
+    else -> "%.6g".format(value)
+}
+
+private fun parseLR(s: String): Float? = s.trim().toFloatOrNull()
+    ?: s.trim().lowercase().toFloatOrNull()
