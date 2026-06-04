@@ -76,7 +76,8 @@ data class TrainingUiState(
     val estimatedRemainingMs: Long = 0,
     val progressPercent: Float = 0f,
     val outputPath: String = "",
-    val logExportPath: String = ""
+    val logExportPath: String = "",
+    val error: String? = null
 ) {
     val progressText: String
         get() = when (trainingState) {
@@ -429,6 +430,8 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             _uiState.update { it.copy(logExportPath = logFile.absolutePath) }
         }
     }
+
+    fun clearError() { _uiState.update { it.copy(error = null) } }
 
     override fun onCleared() { super.onCleared(); NativeTraining.nativeCleanup() }
 
