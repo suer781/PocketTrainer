@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(PocketTrainer CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # MobileFineTuner operator 库
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -25,9 +26,6 @@ add_subdirectory(third_party/MobileFineTuner/operator operators_build)
 add_library(pocket_trainer SHARED training_jni.cpp)
 
 target_include_directories(pocket_trainer PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/MobileFineTuner/
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/MobileFineTuner/finetune_ops
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/MobileFineTuner/operator
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/MobileFineTuner/operator/finetune_ops
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/MobileFineTuner/operator/opt_ops
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/MobileFineTuner/operator/opt_ops/core_ext

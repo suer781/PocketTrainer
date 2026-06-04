@@ -1,270 +1,211 @@
-// PocketTrainer JNI Bridge — 真实版本
-// 连接 Kotlin UI ↔ MobileFineTuner C++ 训练引擎
-
 #include <jni.h>
 #include <string>
 #include <memory>
-#include <atomic>
-#include <mutex>
-#include <thread>
-
-#ifdef __ANDROID__
 #include <android/log.h>
-#define LOG_TAG "PocketTrainer"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#else
-#define LOGI(...) printf(__VA_ARGS__)
-#define LOGE(...) fprintf(stderr, __VA_ARGS__)
-#endif
 
-// MobileFineTuner 头文件
 #include "core/tensor.h"
-#include "core/safetensors_loader.h"
+#include "graph/safetensors_loader.h"
 #include "graph/gpt2_model.h"
 #include "graph/lora_injector.h"
 #include "optim/trainer.h"
 #include "optim/adam.h"
 #include "data/wikitext2_dataset.h"
 
-// 全局训练状态
-struct TrainingState {
-    std::unique_ptr<ops::GPT2Model> model;
-    std::unique_ptr<ops::SafeTensorsLoader> loader;
-    std::unique_ptr<ops::LoraInjector> lora_injector;
-    std::unique_ptr<ops::WikiText2Dataset> train_dataset;
-    std::unique_ptr<ops::WikiText2Dataset> eval_dataset;
-    std::unique_ptr<ops::LoRATrainer> trainer;
+#define LOG_TAG "PocketTrainer"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-    std::atomic<bool> is_initialized{false};
-    std::atomic<bool> has_lora{false};
-    std::atomic<bool> has_data{false};
-    std::atomic<bool> is_training{false};
-    std::atomic<bool> should_stop{false};
-    std::atomic<bool> is_paused{false};
+using namespace ops;
 
-    std::unique_ptr<std::thread> training_thread;
-    std::mutex mutex;
+static std::shared_ptr<GPT2Model> g_model;
+static std::unique_ptr<LoraInjector> g_lora_injector;
+static std::unique_ptr<LoRATrainer> g_trainer;
+static std::shared_ptr<WikiText2Dataset> g_train_ds;
+static std::shared_ptr<WikiText2Dataset> g_eval_ds;
+static GPT2Config g_config;
+static bool g_initialized = false;
 
-    void reset() {
-        std::lock_guard<std::mutex> lock(mutex);
-        should_stop = true;
-        if (training_thread && training_thread->joinable()) training_thread->join();
-        trainer.reset();
-        train_dataset.reset();
-        eval_dataset.reset();
-        lora_injector.reset();
-        loader.reset();
-        model.reset();
-        is_initialized = has_lora = has_data = is_training = should_stop = is_paused = false;
-    }
-};
-
-static TrainingState g_state;
-
-// JNI 回调
-struct JNICallback {
-    JavaVM* jvm;
-    jobject callback_obj;
-    jmethodID on_progress_method;
-    jmethodID on_complete_method;
-    jmethodID on_error_method;
-
-    void onProgress(int epoch, int total, int step, float loss) {
-        JNIEnv* env;
-        bool attached = false;
-        if (jvm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-            jvm->AttachCurrentThread(&env, nullptr);
-            attached = true;
-        }
-        env->CallVoidMethod(callback_obj, on_progress_method, epoch, total, step, loss);
-        if (attached) jvm->DetachCurrentThread();
-    }
-
-    void onComplete(bool success, const std::string& msg) {
-        JNIEnv* env;
-        bool attached = false;
-        if (jvm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-            jvm->AttachCurrentThread(&env, nullptr);
-            attached = true;
-        }
-        jstring jmsg = env->NewStringUTF(msg.c_str());
-        env->CallVoidMethod(callback_obj, on_complete_method, success, jmsg);
-        env->DeleteLocalRef(jmsg);
-        if (attached) jvm->DetachCurrentThread();
-    }
-
-    void onError(const std::string& err) {
-        JNIEnv* env;
-        bool attached = false;
-        if (jvm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-            jvm->AttachCurrentThread(&env, nullptr);
-            attached = true;
-        }
-        jstring jerr = env->NewStringUTF(err.c_str());
-        env->CallVoidMethod(callback_obj, on_error_method, jerr);
-        env->DeleteLocalRef(jerr);
-        if (attached) jvm->DetachCurrentThread();
-    }
-};
-
-static std::unique_ptr<JNICallback> g_callback;
-
-extern "C" {
-
-JNIEXPORT jboolean JNICALL
-Java_com_pockettrainer_training_NativeTraining_nativeInitialize(
-    JNIEnv* env, jobject, jstring modelDirPath, jint numThreads) {
-    const char* path = env->GetStringUTFChars(modelDirPath, nullptr);
-    std::string model_path(path);
-    env->ReleaseStringUTFChars(modelDirPath, path);
-    LOGI("init: %s threads=%d", model_path.c_str(), numThreads);
-    try {
-        if (numThreads > 0) ops::set_num_threads(numThreads);
-        auto config = ops::GPT2Config::from_pretrained(model_path);
-        g_state.model = std::make_unique<ops::GPT2Model>(config);
-        g_state.loader = std::make_unique<ops::SafeTensorsLoader>();
-        g_state.loader->load(model_path + "/model.safetensors");
-        g_state.loader->apply_to_model(*g_state.model);
-        g_state.model->set_training_mode(false);
-        g_state.is_initialized = true;
-        LOGI("Model loaded: %d layers", config.n_layers);
-        return JNI_TRUE;
-    } catch (const std::exception& e) {
-        LOGE("init failed: %s", e.what());
-        return JNI_FALSE;
-    }
+static std::string jstr(JNIEnv* env, jstring js) {
+    if (!js) return "";
+    const char* c = env->GetStringUTFChars(js, nullptr);
+    std::string s(c);
+    env->ReleaseStringUTFChars(js, c);
+    return s;
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_pockettrainer_training_NativeTraining_nativeSetupLoRA(
-    JNIEnv*, jobject, jint rank, jfloat alpha) {
-    if (!g_state.is_initialized) return JNI_FALSE;
-    LOGI("lora: rank=%d alpha=%.1f", rank, alpha);
-    try {
-        g_state.lora_injector = std::make_unique<ops::LoraInjector>();
-        ops::LoraSpec spec;
-        spec.rank = rank;
-        spec.alpha = alpha;
-        spec.split_qkv = true;
-        g_state.lora_injector->inject(*g_state.model, spec);
-        g_state.has_lora = true;
-        LOGI("LoRA injected: %zu trainable params", g_state.model->trainable_parameters().size());
-        return JNI_TRUE;
-    } catch (const std::exception& e) {
-        LOGE("lora failed: %s", e.what());
-        return JNI_FALSE;
-    }
+static std::vector<int32_t> dummy_encode(const std::string& s) {
+    return std::vector<int32_t>(s.begin(), s.end());
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_pockettrainer_training_NativeTraining_nativeLoadDataset(
-    JNIEnv* env, jobject, jstring dataPath, jint seqLen, jint batchSize) {
-    const char* path = env->GetStringUTFChars(dataPath, nullptr);
-    std::string data_path(path);
-    env->ReleaseStringUTFChars(dataPath, path);
-    LOGI("data: %s seq=%d batch=%d", data_path.c_str(), seqLen, batchSize);
+// Load config from safetensors
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeLoadConfig(
+        JNIEnv* env, jobject, jstring path, jstring model_type) {
+    std::string p = jstr(env, path);
     try {
-        g_state.train_dataset = std::make_unique<ops::WikiText2Dataset>(data_path + "/train.txt", seqLen, batchSize);
-        g_state.eval_dataset = std::make_unique<ops::WikiText2Dataset>(data_path + "/valid.txt", seqLen, batchSize);
-        g_state.has_data = true;
-        LOGI("Dataset: train=%d eval=%d", g_state.train_dataset->size(), g_state.eval_dataset->size());
-        return JNI_TRUE;
-    } catch (const std::exception& e) {
-        LOGE("data failed: %s", e.what());
-        return JNI_FALSE;
-    }
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_pockettrainer_training_NativeTraining_nativeTrain(
-    JNIEnv* env, jobject, jint epochs, jint gradAccum, jfloat lr, jfloat maxNorm, jobject callback) {
-    if (!g_state.is_initialized || !g_state.has_lora || !g_state.has_data) return JNI_FALSE;
-
-    g_callback = std::make_unique<JNICallback>();
-    env->GetJavaVM(&g_callback->jvm);
-    g_callback->callback_obj = env->NewGlobalRef(callback);
-    jclass cls = env->GetObjectClass(callback);
-    g_callback->on_progress_method = env->GetMethodID(cls, "onProgress", "(IIIF)V");
-    g_callback->on_complete_method = env->GetMethodID(cls, "onComplete", "(ZLjava/lang/String;)V");
-    g_callback->on_error_method = env->GetMethodID(cls, "onError", "(Ljava/lang/String;)V");
-
-    ops::TrainerConfig config;
-    config.num_epochs = epochs;
-    config.learning_rate = lr;
-    config.weight_decay = 0.01f;
-    config.warmup_steps = 10;
-    config.max_grad_norm = maxNorm;
-    config.log_interval = 10;
-    config.eval_interval = 500;
-
-    LOGI("train: %d epochs lr=%.6f", epochs, lr);
-    g_state.should_stop = false;
-    g_state.is_paused = false;
-
-    g_state.training_thread = std::make_unique<std::thread>([config, gradAccum, lr]() {
-        try {
-            g_state.is_training = true;
-            g_state.trainer = std::make_unique<ops::LoRATrainer>(
-                *g_state.model, *g_state.lora_injector,
-                *g_state.train_dataset, *g_state.eval_dataset, config);
-
-            for (int epoch = 0; epoch < config.num_epochs; epoch++) {
-                if (g_state.should_stop) break;
-                g_state.train_dataset->shuffle();
-                int total_steps = g_state.train_dataset->size();
-                for (int step = 0; step < total_steps; step++) {
-                    if (g_state.should_stop) break;
-                    while (g_state.is_paused && !g_state.should_stop)
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    float loss = g_state.trainer->train_step(epoch, step, lr, gradAccum);
-                    if (step % config.log_interval == 0)
-                        g_callback->onProgress(epoch, config.num_epochs, step, loss);
-                    ops::clip_grad_norm(g_state.model->trainable_parameters(), config.max_grad_norm);
-                }
-                if (g_state.should_stop) break;
-                g_state.trainer->evaluate(epoch);
+        SafeTensorsReader reader(p);
+        reader.parse_header();
+        auto names = reader.get_tensor_names();
+        for (auto& n : names) {
+            if (n.find("wte.weight") != std::string::npos) {
+                auto t = reader.load_tensor(n, false);
+                g_config.vocab_size = t->shape()[0];
+                g_config.n_embd = t->shape()[1];
             }
-            g_state.is_training = false;
-            g_callback->onComplete(true, "Training completed");
-        } catch (const std::exception& e) {
-            g_state.is_training = false;
-            g_callback->onError(std::string("Training failed: ") + e.what());
+            if (n.find("h.0.ln_1.weight") != std::string::npos) {
+                int max_layer = 0;
+                for (auto& nn : names) {
+                    size_t pos = nn.find("h.");
+                    if (pos != std::string::npos) {
+                        int l = std::atoi(nn.c_str() + pos + 2);
+                        if (l > max_layer) max_layer = l;
+                    }
+                }
+                g_config.n_layer = max_layer + 1;
+            }
         }
-    });
-    return JNI_TRUE;
+        if (g_config.n_head == 0) g_config.n_head = g_config.n_embd / 64;
+        LOGI("Config: n_layer=%d n_embd=%d n_head=%d vocab=%d",
+             g_config.n_layer, g_config.n_embd, g_config.n_head, g_config.vocab_size);
+        return 1;
+    } catch (const std::exception& e) {
+        LOGE("LoadConfig: %s", e.what());
+        return 0;
+    }
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_pockettrainer_training_NativeTraining_nativeSave(JNIEnv* env, jobject, jstring outputPath) {
-    const char* path = env->GetStringUTFChars(outputPath, nullptr);
-    LOGI("save: %s", path);
+// Load model + inject LoRA
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeLoadModel(
+        JNIEnv* env, jobject, jstring path, jstring model_type) {
+    std::string p = jstr(env, path);
     try {
-        g_state.lora_injector->save_lora_safetensors(std::string(path));
-        env->ReleaseStringUTFChars(outputPath, path);
+        SafeTensorsReader reader(p);
+        reader.parse_header();
+        g_model = std::make_shared<GPT2Model>(g_config);
+        auto names = reader.get_tensor_names();
+        for (auto& name : names) {
+            auto t = reader.load_tensor(name, true);
+            g_model->assign_weight(name, t);
+        }
+        g_model->tie_weights();
+        g_lora_injector = std::make_unique<LoraInjector>();
+        LoraSpec spec;
+        spec.rank = 8;
+        spec.alpha = 16.0f;
+        spec.dropout = 0.05f;
+        g_lora_injector->inject(*g_model, spec);
+        g_initialized = true;
+        LOGI("Model loaded, LoRA injected. Trainable: %zu",
+             g_lora_injector->get_trainable_params().size());
+        return reinterpret_cast<jlong>(g_model.get());
+    } catch (const std::exception& e) {
+        LOGE("LoadModel: %s", e.what());
+        return 0;
+    }
+}
+
+// Start training (blocking)
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeStartTraining(
+        JNIEnv* env, jobject,
+        jstring dataset_path, jstring output_path,
+        jint epochs, jint batch_size, jfloat lr,
+        jint lora_rank, jfloat lora_alpha,
+        jint n_threads) {
+    if (!g_model || !g_lora_injector) {
+        LOGE("No model loaded");
+        return JNI_FALSE;
+    }
+    std::string ds_path = jstr(env, dataset_path);
+    std::string out_path = jstr(env, output_path);
+
+    // Re-inject LoRA if rank changed
+    if (lora_rank > 0) {
+        g_lora_injector = std::make_unique<LoraInjector>();
+        LoraSpec spec;
+        spec.rank = lora_rank;
+        spec.alpha = lora_alpha;
+        spec.dropout = 0.05f;
+        g_lora_injector->inject(*g_model, spec);
+        LOGI("Re-injected LoRA: rank=%d alpha=%.1f", (int)lora_rank, (float)lora_alpha);
+    }
+
+    // Dataset
+    try {
+        WT2Config wt2;
+        wt2.jsonl_train = ds_path;
+        wt2.seq_len = g_config.n_positions > 0 ? g_config.n_positions : 256;
+        wt2.stride = -1;
+        g_train_ds = std::make_shared<WikiText2Dataset>(wt2, dummy_encode);
+        // Use same dataset for eval (TODO: split)
+        g_eval_ds = g_train_ds;
+        LOGI("Dataset: %zu sequences", g_train_ds->num_sequences());
+    } catch (const std::exception& e) {
+        LOGE("Dataset: %s", e.what());
+        return JNI_FALSE;
+    }
+
+    // Trainer config
+    TrainerConfig cfg;
+    cfg.num_epochs = epochs;
+    cfg.learning_rate = lr;
+    cfg.warmup_ratio = 0.05f;
+    cfg.weight_decay = 0.01f;
+    cfg.max_grad_norm = 1.0f;
+    cfg.logging_steps = 10;
+    cfg.eval_steps = 0;
+    cfg.output_dir = out_path;
+
+    g_trainer = std::make_unique<LoRATrainer>(
+        *g_model, *g_lora_injector,
+        *g_train_ds, *g_eval_ds, cfg);
+
+    LOGI("Training: epochs=%d bs=%d lr=%.1e lora_rank=%d",
+         (int)epochs, (int)batch_size, (float)lr, (int)lora_rank);
+    try {
+        g_trainer->train();
         return JNI_TRUE;
     } catch (const std::exception& e) {
-        env->ReleaseStringUTFChars(outputPath, path);
-        LOGE("save failed: %s", e.what());
+        LOGE("Training: %s", e.what());
         return JNI_FALSE;
     }
 }
 
-JNIEXPORT void JNICALL Java_com_pockettrainer_training_NativeTraining_nativeStop(JNIEnv*, jobject) { g_state.should_stop = true; }
-JNIEXPORT void JNICALL Java_com_pockettrainer_training_NativeTraining_nativePause(JNIEnv*, jobject) { g_state.is_paused = true; }
-JNIEXPORT void JNICALL Java_com_pockettrainer_training_NativeTraining_nativeResume(JNIEnv*, jobject) { g_state.is_paused = false; }
-JNIEXPORT void JNICALL Java_com_pockettrainer_training_NativeTraining_nativeRelease(JNIEnv* env, jobject) {
-    g_state.reset();
-    if (g_callback) { env->DeleteGlobalRef(g_callback->callback_obj); g_callback.reset(); }
+extern "C" JNIEXPORT void JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativePauseTraining(JNIEnv*, jobject) {
 }
-JNIEXPORT jint JNICALL Java_com_pockettrainer_training_NativeTraining_nativeGetLoRAParamCount(JNIEnv*, jobject) { return g_state.has_lora ? g_state.model->trainable_parameters().size() : 0; }
-JNIEXPORT jstring JNICALL Java_com_pockettrainer_training_NativeTraining_nativeGetModelInfo(JNIEnv* env, jobject) {
-    if (!g_state.is_initialized) return env->NewStringUTF("No model");
-    auto& c = g_state.model->get_config();
-    char buf[256]; snprintf(buf, sizeof(buf), "GPT-2 | %d layers | %d hidden | %d heads", c.n_layers, c.n_embd, c.n_head);
-    return env->NewStringUTF(buf);
-}
-JNIEXPORT jint JNICALL Java_com_pockettrainer_training_NativeTraining_nativeGetDatasetSize(JNIEnv*, jobject) { return g_state.has_data ? g_state.train_dataset->size() : 0; }
-JNIEXPORT jboolean JNICALL Java_com_pockettrainer_training_NativeTraining_nativeIsTraining(JNIEnv*, jobject) { return g_state.is_training; }
 
+extern "C" JNIEXPORT void JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeResumeTraining(JNIEnv*, jobject) {
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeStopTraining(JNIEnv*, jobject) {
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeCleanup(JNIEnv*, jobject) {
+    g_trainer.reset();
+    g_lora_injector.reset();
+    g_model.reset();
+    g_train_ds.reset();
+    g_eval_ds.reset();
+    g_initialized = false;
+    LOGI("Cleanup done");
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeExportModel(
+        JNIEnv* env, jobject, jstring path, jstring format) {
+    if (!g_lora_injector) return JNI_FALSE;
+    std::string p = jstr(env, path);
+    try {
+        g_lora_injector->save_lora_safetensors(p);
+        LOGI("LoRA exported: %s", p.c_str());
+        return JNI_TRUE;
+    } catch (const std::exception& e) {
+        LOGE("Export: %s", e.what());
+        return JNI_FALSE;
+    }
 }
