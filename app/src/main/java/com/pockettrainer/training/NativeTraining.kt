@@ -45,5 +45,12 @@ object NativeTraining {
     external fun nativeResumeTraining()
     external fun nativeStopTraining()
     external fun nativeExportModel(outputPath: String): Boolean
+
+    /** 导入 LoRA 权重文件到当前模型 */
+    external fun nativeImportLora(loraPath: String): Boolean
+
+    /** 合并 LoRA 到基座模型并保存完整模型 */
+    external fun nativeMergeAndSave(mergedPath: String): Boolean
+
     external fun nativeCleanup()
 }
