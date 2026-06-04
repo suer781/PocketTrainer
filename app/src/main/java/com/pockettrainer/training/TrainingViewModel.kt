@@ -19,12 +19,22 @@ enum class TrainingState {
     IDLE, LOADING, READY, RUNNING, PAUSED, COMPLETED, ERROR
 }
 
+enum class DataSourceMode {
+    TEXT,   // 直接输入文本
+    FILE    // 导入文件
+}
+
 data class TrainingUiState(
     val availableModels: List<ModelInfo> = emptyList(),
     val selectedModel: ModelInfo? = null,
-    val datasetPath: String = "",
-    val datasetName: String = "",
+    // 数据源：多选，可以同时用文本+文件
+    val directText: String = "",           // 用户直接输入的文本
+    val datasetPath: String = "",          // 导入的文件路径
+    val datasetName: String = "",          // 导入的文件名
+    val dataSourceMode: DataSourceMode = DataSourceMode.TEXT,  // 当前输入模式
+    // 系统提示词
     val systemPrompt: String = "",
+    // 训练状态
     val trainingState: TrainingState = TrainingState.IDLE,
     val errorMessage: String? = null,
     val currentEpoch: Int = 0,
@@ -66,7 +76,8 @@ data class TrainingUiState(
         get() = selectedModel?.let { "%.1f MB".format(it.fileSizeMb) } ?: "未选择"
 
     val canStartTraining: Boolean
-        get() = trainingState == TrainingState.READY && datasetPath.isNotEmpty()
+        get() = trainingState == TrainingState.READY &&
+                (directText.isNotEmpty() || datasetPath.isNotEmpty())
 
     val lossTrendDirection: Int
         get() {
@@ -157,7 +168,15 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ── 数据集 ──
+    // ── 数据源 ──
+
+    fun setDataSourceMode(mode: DataSourceMode) {
+        _uiState.update { it.copy(dataSourceMode = mode) }
+    }
+
+    fun setDirectText(text: String) {
+        _uiState.update { it.copy(directText = text) }
+    }
 
     /** 从外部 URI 导入数据集文件 */
     fun importDatasetFromUri(uri: Uri) {
@@ -198,8 +217,18 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         loraAlpha: Float = 16f,
         nThreads: Int = 4
     ) {
-        val dsPath = _uiState.value.datasetPath
-        if (dsPath.isEmpty()) return
+        val state = _uiState.value
+        // 确定数据集路径：文件模式直接用路径，文本模式先写临时文件
+        val dsPath = when {
+            state.datasetPath.isNotEmpty() -> state.datasetPath
+            state.directText.isNotEmpty() -> {
+                val dataDir = File(context.getExternalFilesDir(null), "datasets").apply { mkdirs() }
+                val tmpFile = File(dataDir, "direct_input_${System.currentTimeMillis()}.txt")
+                tmpFile.writeText(state.directText)
+                tmpFile.absolutePath
+            }
+            else -> return
+        }
 
         NativeTraining.nativeSetCallback(object : TrainingCallback {
             override fun onProgress(epoch: Int, totalEpochs: Int, step: Int, totalSteps: Int, loss: Float) {
