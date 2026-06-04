@@ -301,24 +301,34 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTrainingAsync(
         jint lora_rank, jfloat lora_alpha, jfloat lora_dropout,
         jfloat warmup_ratio, jfloat weight_decay,
         jfloat max_grad_norm, jint grad_accum_steps,
-        jint max_seq_len,
+        jint max_seq_len, jfloat val_split,
+        jint preprocessing, jint scheduler_type,
+        jint early_stopping, jint early_stopping_patience,
+        jfloat early_stopping_min_delta,
+        jstring jresume_checkpoint, jint save_total_limit,
         jint n_threads, jint save_steps, jint seed) {
     std::string dataset_path = jstr(env, jdataset_path);
     std::string output_path  = jstr(env, joutput_path);
     std::string system_prompt = jstr(env, jsystem_prompt);
+    std::string resume_checkpoint = jstr(env, jresume_checkpoint);
 
     // capture all params
     int   _epochs = epochs, _bs = batch_size, _lr_r = lora_rank, _nt = n_threads;
     int   _ga = grad_accum_steps, _sl = max_seq_len, _ss = save_steps, _seed = seed;
+    int   _prep = preprocessing, _sched = scheduler_type;
+    int   _es = early_stopping, _es_pat = early_stopping_patience, _stl = save_total_limit;
     float _lr = learning_rate, _la = lora_alpha, _ld = lora_dropout;
     float _wr = warmup_ratio, _wd = weight_decay, _gn = max_grad_norm;
+    float _vs = val_split, _es_delta = early_stopping_min_delta;
 
     g_stop_requested.store(false);
     g_pause_requested.store(false);
 
-    g_train_thread = std::thread([dataset_path, output_path, system_prompt,
+    g_train_thread = std::thread([dataset_path, output_path, system_prompt, resume_checkpoint,
                                    _epochs, _bs, _lr, _lr_r, _la, _ld,
-                                   _wr, _wd, _gn, _ga, _sl, _nt, _ss, _seed]() {
+                                   _wr, _wd, _gn, _ga, _sl, _vs,
+                                   _prep, _sched, _es, _es_pat, _es_delta, _stl,
+                                   _nt, _ss, _seed]() {
         JNIEnv* thread_env = nullptr;
         g_jvm->AttachCurrentThread(&thread_env, nullptr);
 
