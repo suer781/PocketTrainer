@@ -216,6 +216,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_pockettrainer_training_NativeTraining_nativeStartTraining(
         JNIEnv* env, jobject,
         jstring jdataset_path, jstring joutput_path,
+        jstring jsystem_prompt,
         jint epochs, jint batch_size, jfloat learning_rate,
         jint lora_rank, jfloat lora_alpha, jint n_threads) {
     if (!g_initialized) {
@@ -225,6 +226,7 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTraining(
 
     std::string dataset_path = jstr(env, jdataset_path);
     std::string output_path  = jstr(env, joutput_path);
+    std::string system_prompt = jstr(env, jsystem_prompt);
 
     LOGI("nativeStartTraining: dataset=%s, output=%s, epochs=%d, bs=%d, lr=%f",
          dataset_path.c_str(), output_path.c_str(), epochs, batch_size, learning_rate);
@@ -236,9 +238,9 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTraining(
             g_lora_injector->inject(*g_model, lora_rank, lora_alpha, 0.05);
         }
 
-        // 加载数据集（支持 .txt/.jsonl/.json/.csv）
-        g_train_ds = std::make_unique<TextDataset>(dataset_path, 128);
-        g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, 12345);
+        // 加载数据集（支持 .txt/.jsonl/.json/.csv，可选系统提示词注入）
+        g_train_ds = std::make_unique<TextDataset>(dataset_path, 128, system_prompt);
+        g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, system_prompt, 12345);
 
         // 配置训练器
         TrainerConfig cfg;
@@ -294,18 +296,20 @@ JNIEXPORT void JNICALL
 Java_com_pockettrainer_training_NativeTraining_nativeStartTrainingAsync(
         JNIEnv* env, jobject obj,
         jstring jdataset_path, jstring joutput_path,
+        jstring jsystem_prompt,
         jint epochs, jint batch_size, jfloat learning_rate,
         jint lora_rank, jfloat lora_alpha, jint n_threads) {
     // 保存参数到 local refs（线程安全）
     std::string dataset_path = jstr(env, jdataset_path);
     std::string output_path  = jstr(env, joutput_path);
+    std::string system_prompt = jstr(env, jsystem_prompt);
     int   e = epochs, bs = batch_size, lr_r = lora_rank, nt = n_threads;
     float lr = learning_rate, la = lora_alpha;
 
     g_stop_requested.store(false);
     g_pause_requested.store(false);
 
-    g_train_thread = std::thread([dataset_path, output_path, e, bs, lr, lr_r, la, nt]() {
+    g_train_thread = std::thread([dataset_path, output_path, system_prompt, e, bs, lr, lr_r, la, nt]() {
         JNIEnv* thread_env = nullptr;
         g_jvm->AttachCurrentThread(&thread_env, nullptr);
 
@@ -317,8 +321,8 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTrainingAsync(
                 g_lora_injector->inject(*g_model, lr_r, la, 0.05);
             }
 
-            g_train_ds = std::make_unique<TextDataset>(dataset_path, 128);
-            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, 12345);
+            g_train_ds = std::make_unique<TextDataset>(dataset_path, 128, system_prompt);
+            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, system_prompt, 12345);
 
             TrainerConfig cfg;
             cfg.num_epochs    = e;
