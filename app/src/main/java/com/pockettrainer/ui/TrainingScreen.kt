@@ -4,9 +4,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,10 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.pockettrainer.training.DataSourceMode
-import com.pockettrainer.training.ModelInfo
-import com.pockettrainer.training.TrainingState
-import com.pockettrainer.training.TrainingViewModel
+import com.pockettrainer.training.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,30 +45,30 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("即将对模型进行微调训练，模型权重将被修改。")
                     if (uiState.systemPrompt.isNotEmpty()) {
-                        Card(colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                            Text("系统提示词将被训练进模型权重",
-                                modifier = Modifier.padding(8.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium)
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                            Text("系统提示词将被训练进模型权重", modifier = Modifier.padding(8.dp),
+                                style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                    // 数据集概览
+                    uiState.datasetStats?.let { stats ->
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text("数据集: ${stats.sampleCount} 样本 · ${"%,d".format(stats.estimatedTokens)} tokens",
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text("预计训练: ~${"%.0f".format(stats.estimatedMinutes)} 分钟",
+                                    style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
                     Text("数据集较大时训练时间可能较长，请耐心等待。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("训练过程中请勿关闭应用。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error)
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             },
-            confirmButton = {
-                Button(onClick = { showStartDialog = false; viewModel.startTraining() }) {
-                    Text("开始训练")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStartDialog = false }) { Text("取消") }
-            }
+            confirmButton = { Button(onClick = { showStartDialog = false; viewModel.startTraining() }) { Text("开始训练") } },
+            dismissButton = { TextButton(onClick = { showStartDialog = false }) { Text("取消") } }
         )
     }
 
@@ -78,11 +77,9 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // ══════════════════════════════════════
-        // 第一步：导入基座模型
+        // ① 导入基座模型
         // ══════════════════════════════════════
-        item {
-            SectionHeader(1, "导入基座模型", "Qwen、DeepSeek 等 .safetensors 格式，参数量不限")
-        }
+        item { SectionHeader(1, "导入基座模型", "Qwen、DeepSeek 等 .safetensors 格式，参数量不限") }
 
         if (uiState.availableModels.isNotEmpty()) {
             items(uiState.availableModels) { model ->
@@ -100,27 +97,26 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         item {
             Button(
                 onClick = { viewModel.loadModel() },
-                enabled = uiState.selectedModel != null &&
-                        uiState.trainingState in listOf(TrainingState.IDLE, TrainingState.ERROR),
+                enabled = uiState.selectedModel != null && uiState.trainingState in listOf(TrainingState.IDLE, TrainingState.ERROR),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.CloudDownload, null); Spacer(Modifier.width(8.dp))
                 Text(when (uiState.trainingState) {
-                    TrainingState.LOADING -> "加载中..."
-                    TrainingState.READY   -> "重新加载"
-                    else -> "加载模型"
+                    TrainingState.LOADING -> "加载中..."; TrainingState.READY -> "重新加载"; else -> "加载模型"
                 })
             }
         }
 
-        // ══════════════════════════════════════
-        // 第二步：训练数据
-        // ══════════════════════════════════════
-        item {
-            SectionHeader(2, "训练数据", "直接输入文本或导入文件")
+        // ── 模型信息卡 ──
+        if (uiState.modelMetadata != null) {
+            item { ModelInfoCard(uiState.modelMetadata!!, uiState.formattedFileSize) }
         }
 
-        // 模式切换
+        // ══════════════════════════════════════
+        // ② 训练数据
+        // ══════════════════════════════════════
+        item { SectionHeader(2, "训练数据", "直接输入文本或导入文件") }
+
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -138,7 +134,6 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
             }
         }
 
-        // 文本输入模式
         if (uiState.dataSourceMode == DataSourceMode.TEXT) {
             item {
                 OutlinedTextField(
@@ -147,43 +142,28 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                     modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
                     placeholder = { Text("粘贴或输入训练文本...\n\n每段用空行分隔，每段作为一个训练样本") },
                     supportingText = {
-                        Text(
-                            if (uiState.directText.isEmpty()) "输入要训练进模型的文本内容"
-                            else "${uiState.directText.length} 字符",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text(if (uiState.directText.isEmpty()) "输入要训练进模型的文本内容"
+                             else "${uiState.directText.length} 字符", style = MaterialTheme.typography.bodySmall)
                     }
                 )
             }
         }
 
-        // 文件导入模式
         if (uiState.dataSourceMode == DataSourceMode.FILE) {
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        datasetPickerLauncher.launch(arrayOf("*/*"))
-                    },
+                    modifier = Modifier.fillMaxWidth().clickable { datasetPickerLauncher.launch(arrayOf("*/*")) },
                     colors = CardDefaults.cardColors(
-                        containerColor = if (uiState.datasetPath.isNotEmpty())
-                            MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
+                        containerColor = if (uiState.datasetPath.isNotEmpty()) MaterialTheme.colorScheme.primaryContainer
+                                         else MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (uiState.datasetPath.isNotEmpty()) Icons.Default.CheckCircle
-                            else Icons.Default.FolderOpen, null,
-                            tint = if (uiState.datasetPath.isNotEmpty()) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Icon(if (uiState.datasetPath.isNotEmpty()) Icons.Default.CheckCircle else Icons.Default.FolderOpen, null,
+                            tint = if (uiState.datasetPath.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(
-                                if (uiState.datasetName.isNotEmpty()) uiState.datasetName
-                                else "点击选择文件（.txt/.jsonl/.json/.csv 等）",
-                                fontWeight = FontWeight.Medium
-                            )
+                            Text(if (uiState.datasetName.isNotEmpty()) uiState.datasetName
+                                 else "点击选择文件（.txt/.jsonl/.json/.csv 等）", fontWeight = FontWeight.Medium)
                             if (uiState.datasetPath.isNotEmpty()) {
                                 Text(uiState.datasetPath, style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -194,12 +174,15 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
             }
         }
 
-        // ══════════════════════════════════════
-        // 第三步：系统提示词（可选）
-        // ══════════════════════════════════════
-        item {
-            SectionHeader(3, "系统提示词（可选）", "训练进模型权重，之后无需再传")
+        // ── 数据集统计 ──
+        if (uiState.datasetStats != null) {
+            item { DatasetStatsCard(uiState.datasetStats!!) }
         }
+
+        // ══════════════════════════════════════
+        // ③ 系统提示词（可选）
+        // ══════════════════════════════════════
+        item { SectionHeader(3, "系统提示词（可选）", "训练进模型权重，之后无需再传") }
 
         item {
             OutlinedTextField(
@@ -209,17 +192,51 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                 placeholder = { Text("例如：你是一个专业的法律助手，擅长...") },
                 label = { Text("系统提示词") },
                 supportingText = {
-                    Text(
-                        if (uiState.systemPrompt.isEmpty()) "留空则不注入"
-                        else "${uiState.systemPrompt.length} 字符，将注入每个训练样本前",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(if (uiState.systemPrompt.isEmpty()) "留空则不注入"
+                         else "${uiState.systemPrompt.length} 字符，将注入每个训练样本前", style = MaterialTheme.typography.bodySmall)
                 }
             )
         }
 
         // ══════════════════════════════════════
-        // 第四步：高级参数（可选）
+        // ④ 训练预设
+        // ══════════════════════════════════════
+        item { SectionHeader(4, "训练预设", "一键套用推荐配置，或自定义高级参数") }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TrainingPresets.presets.forEach { preset ->
+                    val isActive = uiState.activePreset == preset.name
+                    AssistChip(
+                        onClick = { viewModel.applyPreset(preset) },
+                        label = { Text("${preset.emoji} ${preset.name}") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer
+                                             else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    )
+                }
+            }
+        }
+
+        // ── 预设说明 ──
+        if (uiState.activePreset.isNotEmpty()) {
+            item {
+                val preset = TrainingPresets.presets.find { it.name == uiState.activePreset }
+                preset?.let {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))) {
+                        Text(it.description, modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        // ══════════════════════════════════════
+        // ⑤ 高级参数
         // ══════════════════════════════════════
         item {
             AdvancedOptionsPanel(
@@ -231,14 +248,10 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         }
 
         // ══════════════════════════════════════
-        // 第五步：训练
+        // ⑥ 训练
         // ══════════════════════════════════════
-        if (uiState.trainingState in listOf(
-                TrainingState.READY, TrainingState.RUNNING,
-                TrainingState.PAUSED, TrainingState.COMPLETED
-            )
-        ) {
-            item { SectionHeader(4, "开始训练", null) }
+        if (uiState.trainingState in listOf(TrainingState.READY, TrainingState.RUNNING, TrainingState.PAUSED, TrainingState.COMPLETED)) {
+            item { SectionHeader(6, "开始训练", null) }
 
             item {
                 TrainingControlPanel(
@@ -247,7 +260,8 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
                     onPause = { viewModel.pauseTraining() },
                     onResume = { viewModel.resumeTraining() },
                     onStop = { viewModel.stopTraining() },
-                    onExport = { viewModel.exportModel() }
+                    onExport = { viewModel.exportModel() },
+                    onExportLog = { viewModel.exportTrainingLog() }
                 )
             }
         }
@@ -278,10 +292,8 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
 
         // ── 免责声明 ──
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
-            ) {
+            Card(modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.Info, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
@@ -296,6 +308,8 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         }
     }
 }
+
+// ── 子组件 ──
 
 @Composable
 private fun SectionHeader(step: Int, title: String, subtitle: String?) {
@@ -321,9 +335,7 @@ fun ModelCard(model: ModelInfo, isSelected: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (isSelected) {
@@ -339,26 +351,52 @@ fun ModelCard(model: ModelInfo, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+fun ModelInfoCard(meta: ModelMetadata, fileSize: String) {
+    Card(modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))) {
+        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            InfoChip("架构", meta.architecture)
+            InfoChip("参数", meta.paramCount)
+            InfoChip("大小", fileSize)
+        }
+    }
+}
+
+@Composable
+fun DatasetStatsCard(stats: DatasetStats) {
+    Card(modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f))) {
+        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            InfoChip("样本", "${stats.sampleCount}")
+            InfoChip("字符", "%,d".format(stats.charCount))
+            InfoChip("~Tokens", "%,d".format(stats.estimatedTokens))
+            InfoChip("预计", "~${"%.0f".format(stats.estimatedMinutes)} 分钟")
+        }
+    }
+}
+
+@Composable
+fun InfoChip(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 fun TrainingControlPanel(
-    uiState: com.pockettrainer.training.TrainingUiState,
+    uiState: TrainingUiState,
     onStart: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
-    onStop: () -> Unit, onExport: () -> Unit
+    onStop: () -> Unit, onExport: () -> Unit, onExportLog: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (uiState.trainingState) {
                     TrainingState.READY, TrainingState.COMPLETED -> {
-                        Button(
-                            onClick = onStart,
-                            enabled = uiState.canStartTraining,
-                            modifier = Modifier.weight(1f)
-                        ) {
+                        Button(onClick = onStart, enabled = uiState.canStartTraining, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp))
-                            Text(when {
-                                !uiState.canStartTraining -> "请先输入训练数据"
-                                else -> "开始训练"
-                            })
+                            Text(if (!uiState.canStartTraining) "请先输入训练数据" else "开始训练")
                         }
                     }
                     TrainingState.RUNNING -> {
@@ -383,9 +421,21 @@ fun TrainingControlPanel(
 
             if (uiState.trainingState == TrainingState.COMPLETED) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Save, null); Spacer(Modifier.width(4.dp)); Text("导出 LoRA 权重")
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Save, null); Spacer(Modifier.width(4.dp)); Text("导出 LoRA")
+                    }
+                    OutlinedButton(onClick = onExportLog, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Description, null); Spacer(Modifier.width(4.dp)); Text("导出日志")
+                    }
                 }
+            }
+
+            // 日志导出路径
+            if (uiState.logExportPath.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text("日志已保存: ${uiState.logExportPath}", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
