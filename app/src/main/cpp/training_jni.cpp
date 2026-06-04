@@ -426,4 +426,48 @@ Java_com_pockettrainer_training_NativeTraining_nativeExportModel(
     }
 }
 
+// Import LoRA weights from file and apply to current model
+JNIEXPORT jboolean JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeImportLora(
+        JNIEnv* env, jobject, jstring jlora_path) {
+    if (!g_initialized || !g_model) {
+        LOGE("Model not loaded, cannot import LoRA");
+        return JNI_FALSE;
+    }
+    std::string lora_path = jstr(env, jlora_path);
+    LOGI("nativeImportLora: %s", lora_path.c_str());
+    try {
+        g_lora_injector = std::make_unique<LoraInjector>();
+        g_lora_injector->load_lora_safetensors(lora_path, *g_model);
+        LOGI("LoRA imported successfully");
+        return JNI_TRUE;
+    } catch (const std::exception& e) {
+        LOGE("Import failed: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+// Merge LoRA into base model and save as safetensors
+JNIEXPORT jboolean JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeMergeAndSave(
+        JNIEnv* env, jobject, jstring jmerged_path) {
+    if (!g_initialized || !g_model) {
+        LOGE("Model not loaded");
+        return JNI_FALSE;
+    }
+    std::string merged_path = jstr(env, jmerged_path);
+    LOGI("nativeMergeAndSave: %s", merged_path.c_str());
+    try {
+        if (g_lora_injector) {
+            g_lora_injector->merge_to_base(*g_model);
+        }
+        g_model->save_safetensors(merged_path);
+        LOGI("Merged model saved: %s", merged_path.c_str());
+        return JNI_TRUE;
+    } catch (const std::exception& e) {
+        LOGE("Merge failed: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
 } // extern "C"
