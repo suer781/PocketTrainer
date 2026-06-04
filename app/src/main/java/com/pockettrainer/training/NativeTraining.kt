@@ -4,20 +4,12 @@ package com.pockettrainer.training
  * JNI 桥接层 — 函数名严格匹配 training_jni.cpp
  */
 object NativeTraining {
-    init {
-        System.loadLibrary("pocket_trainer")
-    }
+    init { System.loadLibrary("pocket_trainer") }
 
-    /** 注册回调 */
     external fun nativeSetCallback(callback: TrainingCallback?)
-
-    /** 从 safetensors 推断模型配置 */
     external fun nativeLoadConfig(path: String): Long
-
-    /** 加载模型权重 + 注入 LoRA */
     external fun nativeLoadModel(path: String): Long
 
-    /** 异步训练（后台线程，通过回调通知进度） */
     external fun nativeStartTrainingAsync(
         datasetPath: String,
         outputPath: String,
@@ -33,6 +25,14 @@ object NativeTraining {
         maxGradNorm: Float,
         gradAccumSteps: Int,
         maxSeqLen: Int,
+        valSplit: Float,
+        preprocessing: Int,           // 0=none, 1=clean, 2=dedup
+        schedulerType: Int,           // 0=linear, 1=cosine, 2=constant, 3=constant_with_warmup
+        earlyStopping: Int,           // 0=off, 1=on
+        earlyStoppingPatience: Int,
+        earlyStoppingMinDelta: Float,
+        resumeFromCheckpoint: String,
+        saveTotalLimit: Int,
         nThreads: Int,
         saveSteps: Int,
         seed: Int
