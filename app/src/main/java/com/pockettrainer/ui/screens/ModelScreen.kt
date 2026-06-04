@@ -58,26 +58,8 @@ fun RecommendedTab() {
                     }
                     Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { viewModelScope.launch {
-                        isDownloading.value = true
-                        try {
-                            val mm = ModelManager(context)
-                            val dest = mm.modelsDir.resolve(model.id)
-                            if (!dest.exists()) dest.mkdirs()
-                            val weights = dest.resolve("model.gguf")
-                            if (!weights.exists()) {
-                                val url = mm.getDownloadUrl(model)
-                                java.net.URL(url).openStream().use { inp ->
-                                    weights.outputStream().use { out -> inp.copyTo(out) }
-                                }
-                            }
-                            onComplete(weights.absolutePath)
-                        } catch (e: Exception) { onComplete(null) }
-                        finally { isDownloading.value = false }
-                    } }, Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Download, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("下载模型")
+                    OutlinedButton(onClick = { /* reserved for future model browser */ }, Modifier.fillMaxWidth(), enabled = false) {
+                        Text("即将推出")
                     }
                 }
             }
@@ -89,9 +71,9 @@ fun RecommendedTab() {
 fun DownloadedTab() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.CloudDownload, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.FolderOpen, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
-            Text("还没有下载任何模型", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("还没有导入任何模型", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
