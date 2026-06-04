@@ -21,6 +21,7 @@ object NativeTraining {
     external fun nativeStartTraining(
         datasetPath: String,
         outputPath: String,
+        systemPrompt: String,
         epochs: Int,
         batchSize: Int,
         learningRate: Float,
@@ -33,6 +34,7 @@ object NativeTraining {
     external fun nativeStartTrainingAsync(
         datasetPath: String,
         outputPath: String,
+        systemPrompt: String,
         epochs: Int,
         batchSize: Int,
         learningRate: Float,
