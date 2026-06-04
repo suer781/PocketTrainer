@@ -14,6 +14,7 @@
 #include "gpt2_model.h"
 #include "lora_injector.h"
 #include "safetensors_reader.h"
+#include "text_dataset.h"
 #include "wikitext2_dataset.h"
 #include "loRA_trainer.h"
 #include "trainer_config.h"
@@ -28,8 +29,8 @@ using namespace pocket_trainer;
 static std::unique_ptr<GPT2Model>         g_model;
 static std::unique_ptr<LoraInjector>      g_lora_injector;
 static std::unique_ptr<LoRATrainer>       g_trainer;
-static std::unique_ptr<WikiText2Dataset>  g_train_ds;
-static std::unique_ptr<WikiText2Dataset>  g_eval_ds;
+static std::unique_ptr<TextDataset>    g_train_ds;
+static std::unique_ptr<TextDataset>    g_eval_ds;
 static std::unique_ptr<GPTConfig>         g_config;
 static bool g_initialized = false;
 
@@ -235,9 +236,9 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTraining(
             g_lora_injector->inject(*g_model, lora_rank, lora_alpha, 0.05);
         }
 
-        // 加载数据集
-        g_train_ds = std::make_unique<WikiText2Dataset>(dataset_path, 128, true);
-        g_eval_ds  = std::make_unique<WikiText2Dataset>(dataset_path, 128, false);
+        // 加载数据集（支持 .txt/.jsonl/.json/.csv）
+        g_train_ds = std::make_unique<TextDataset>(dataset_path, 128);
+        g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, 12345);
 
         // 配置训练器
         TrainerConfig cfg;
@@ -316,8 +317,8 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTrainingAsync(
                 g_lora_injector->inject(*g_model, lr_r, la, 0.05);
             }
 
-            g_train_ds = std::make_unique<WikiText2Dataset>(dataset_path, 128, true);
-            g_eval_ds  = std::make_unique<WikiText2Dataset>(dataset_path, 128, false);
+            g_train_ds = std::make_unique<TextDataset>(dataset_path, 128);
+            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, 12345);
 
             TrainerConfig cfg;
             cfg.num_epochs    = e;
