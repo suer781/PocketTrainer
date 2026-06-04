@@ -334,6 +334,10 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             startTimeMs = System.currentTimeMillis()
             _uiState.update { it.copy(trainingState = TrainingState.RUNNING, lossHistory = emptyList(), bestLoss = Float.MAX_VALUE) }
             val outputDir = File(context.getExternalFilesDir(null), "lora_output").apply { mkdirs() }
+            // 将字符串选项转为 JNI int 枚举
+            val prepInt = when (cfg.preprocessing) { "clean" -> 1; "dedup" -> 2; else -> 0 }
+            val schedInt = when (cfg.schedulerType) { "linear" -> 0; "cosine" -> 1; "constant" -> 2; "constant_with_warmup" -> 3; else -> 1 }
+
             NativeTraining.nativeStartTrainingAsync(
                 datasetPath = dsPath,
                 outputPath = outputDir.absolutePath,
@@ -343,8 +347,14 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
                 loraRank = cfg.loraRank, loraAlpha = cfg.loraAlpha, loraDropout = cfg.loraDropout,
                 warmupRatio = cfg.warmupRatio, weightDecay = cfg.weightDecay,
                 maxGradNorm = cfg.maxGradNorm, gradAccumSteps = cfg.gradAccumSteps,
-                maxSeqLen = cfg.maxSeqLen, nThreads = cfg.nThreads,
-                saveSteps = cfg.saveSteps, seed = cfg.seed
+                maxSeqLen = cfg.maxSeqLen, valSplit = cfg.valSplit,
+                preprocessing = prepInt, schedulerType = schedInt,
+                earlyStopping = if (cfg.earlyStopping) 1 else 0,
+                earlyStoppingPatience = cfg.earlyStoppingPatience,
+                earlyStoppingMinDelta = cfg.earlyStoppingMinDelta,
+                resumeFromCheckpoint = cfg.resumeFromCheckpoint,
+                saveTotalLimit = cfg.saveTotalLimit,
+                nThreads = cfg.nThreads, saveSteps = cfg.saveSteps, seed = cfg.seed
             )
         }
     }
