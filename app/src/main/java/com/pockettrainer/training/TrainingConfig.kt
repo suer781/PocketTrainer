@@ -23,6 +23,11 @@ data class TrainingConfig(
     // ── 数据参数 ──
     val maxSeqLen: Int = 128,
 
+    // ── 早停 ──
+    val earlyStopping: Boolean = false,
+    val earlyStoppingPatience: Int = 3,
+    val earlyStoppingMinDelta: Float = 0.001f,
+
     // ── 系统参数 ──
     val nThreads: Int = 4,
     val saveSteps: Int = 500,
@@ -77,6 +82,18 @@ object TrainingParamRegistry {
         ParamMeta("weightDecay", "权重衰减 (Weight Decay)",
             "L2 正则化系数，对大权重施加惩罚以防止过拟合。推荐 0.01，设为 0 则关闭正则化。",
             "0.01", "0 ~ 0.1", "优化器"),
+
+        ParamMeta("earlyStopping", "早停 (Early Stopping)",
+            "当验证集 loss 连续 N 轮不再下降时自动停止训练，避免浪费时间和过拟合。",
+            "关闭", "开/关", "优化器"),
+
+        ParamMeta("earlyStoppingPatience", "早停耐心值 (Patience)",
+            "连续多少个评估周期 loss 不下降就触发早停。越大越容忍波动，但训练时间更长。",
+            "3", "2 ~ 10", "优化器"),
+
+        ParamMeta("earlyStoppingMinDelta", "早停最小降幅",
+            "loss 下降幅度低于此值视为「没有改善」。设太大会过早停，设太小等于没开。",
+            "0.001", "0.0001 ~ 0.01", "优化器"),
 
         ParamMeta("maxGradNorm", "梯度裁剪 (Max Grad Norm)",
             "梯度的最大 L2 范数，超过则等比缩放。防止梯度爆炸，对训练稳定性至关重要。1.0 是常用默认值。",
