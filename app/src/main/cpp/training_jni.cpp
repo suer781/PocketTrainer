@@ -298,43 +298,52 @@ Java_com_pockettrainer_training_NativeTraining_nativeStartTrainingAsync(
         jstring jdataset_path, jstring joutput_path,
         jstring jsystem_prompt,
         jint epochs, jint batch_size, jfloat learning_rate,
-        jint lora_rank, jfloat lora_alpha, jint n_threads) {
-    // 保存参数到 local refs（线程安全）
+        jint lora_rank, jfloat lora_alpha, jfloat lora_dropout,
+        jfloat warmup_ratio, jfloat weight_decay,
+        jfloat max_grad_norm, jint grad_accum_steps,
+        jint max_seq_len,
+        jint n_threads, jint save_steps, jint seed) {
     std::string dataset_path = jstr(env, jdataset_path);
     std::string output_path  = jstr(env, joutput_path);
     std::string system_prompt = jstr(env, jsystem_prompt);
-    int   e = epochs, bs = batch_size, lr_r = lora_rank, nt = n_threads;
-    float lr = learning_rate, la = lora_alpha;
+
+    // capture all params
+    int   _epochs = epochs, _bs = batch_size, _lr_r = lora_rank, _nt = n_threads;
+    int   _ga = grad_accum_steps, _sl = max_seq_len, _ss = save_steps, _seed = seed;
+    float _lr = learning_rate, _la = lora_alpha, _ld = lora_dropout;
+    float _wr = warmup_ratio, _wd = weight_decay, _gn = max_grad_norm;
 
     g_stop_requested.store(false);
     g_pause_requested.store(false);
 
-    g_train_thread = std::thread([dataset_path, output_path, system_prompt, e, bs, lr, lr_r, la, nt]() {
+    g_train_thread = std::thread([dataset_path, output_path, system_prompt,
+                                   _epochs, _bs, _lr, _lr_r, _la, _ld,
+                                   _wr, _wd, _gn, _ga, _sl, _nt, _ss, _seed]() {
         JNIEnv* thread_env = nullptr;
         g_jvm->AttachCurrentThread(&thread_env, nullptr);
 
         try {
             if (!g_initialized) throw std::runtime_error("Model not loaded");
 
-            if (lr_r > 0) {
+            if (_lr_r > 0) {
                 g_lora_injector = std::make_unique<LoraInjector>();
-                g_lora_injector->inject(*g_model, lr_r, la, 0.05);
+                g_lora_injector->inject(*g_model, _lr_r, _la, _ld);
             }
 
-            g_train_ds = std::make_unique<TextDataset>(dataset_path, 128, system_prompt);
-            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, 128, system_prompt, 12345);
+            g_train_ds = std::make_unique<TextDataset>(dataset_path, _sl, system_prompt, _seed);
+            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, _sl, system_prompt, _seed + 1);
 
             TrainerConfig cfg;
-            cfg.num_epochs    = e;
-            cfg.batch_size    = bs;
-            cfg.learning_rate = lr;
-            cfg.warmup_ratio  = 0.1f;
-            cfg.weight_decay  = 0.01f;
-            cfg.max_grad_norm = 1.0f;
-            cfg.gradient_accumulation_steps = 4;
-            cfg.num_threads   = nt;
-            cfg.eval_steps    = 100;
-            cfg.save_steps    = 500;
+            cfg.num_epochs    = _epochs;
+            cfg.batch_size    = _bs;
+            cfg.learning_rate = _lr;
+            cfg.warmup_ratio  = _wr;
+            cfg.weight_decay  = _wd;
+            cfg.max_grad_norm = _gn;
+            cfg.gradient_accumulation_steps = _ga;
+            cfg.num_threads   = _nt;
+            cfg.eval_steps    = _ss;
+            cfg.save_steps    = _ss;
             cfg.output_dir    = output_path;
 
             g_trainer = std::make_unique<LoRATrainer>(
