@@ -1,5 +1,7 @@
 package com.pockettrainer.training
 
+import android.content.Context
+
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -378,6 +380,9 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
+    /** 供 TrainScreen 调用的导出入口 */
+    fun exportLora(ctx: android.content.Context) = exportModel()
 
     // ── 日志导出 ──
 
