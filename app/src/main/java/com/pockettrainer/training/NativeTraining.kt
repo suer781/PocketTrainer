@@ -9,29 +9,31 @@ class NativeTraining {
         fun onError(error: String)
     }
 
-    external fun nativeInitialize(modelPath: String, nThreads: Int): Boolean
+    external fun nativeInitialize(modelDirPath: String, numThreads: Int): Boolean
     external fun nativeSetupLoRA(rank: Int, alpha: Float): Boolean
     external fun nativeLoadDataset(dataPath: String, seqLen: Int, batchSize: Int): Boolean
-    external fun nativeTrain(epochs: Int, gradAccumSteps: Int, learningRate: Float, maxGradNorm: Float): Boolean
+    external fun nativeTrain(epochs: Int, gradAccumSteps: Int, learningRate: Float, maxGradNorm: Float, callback: TrainingCallback): Boolean
     external fun nativeSave(outputPath: String): Boolean
     external fun nativeStop()
     external fun nativePause()
     external fun nativeResume()
     external fun nativeRelease()
+    external fun nativeGetLoRAParamCount(): Int
+    external fun nativeGetModelInfo(): String
+    external fun nativeGetDatasetSize(): Int
+    external fun nativeIsTraining(): Boolean
 
-    fun initialize(modelPath: String, nThreads: Int = 4) = nativeInitialize(modelPath, nThreads)
-    fun setupLoRA(rank: Int = 8, alpha: Float = 16f) = nativeSetupLoRA(rank, alpha)
+    fun initialize(modelDirPath: String, numThreads: Int = 0) = nativeInitialize(modelDirPath, numThreads)
+    fun setupLoRA(rank: Int = 8, alpha: Float = 16.0f) = nativeSetupLoRA(rank, alpha)
     fun prepareData(dataPath: String, seqLen: Int = 128, batchSize: Int = 4) = nativeLoadDataset(dataPath, seqLen, batchSize)
+    fun train(config: TrainingConfig, callback: TrainingCallback) = nativeTrain(config.epochs, config.gradientAccumSteps, config.learningRate, config.maxGradNorm, callback)
+    fun save(outputPath: String) = nativeSave(outputPath)
+    fun stop() = nativeStop()
+    fun pause() = nativePause()
+    fun resume() = nativeResume()
     fun release() = nativeRelease()
+    fun getLoRAParamCount() = nativeGetLoRAParamCount()
+    fun getModelInfo() = nativeGetModelInfo()
+    fun getDatasetSize() = nativeGetDatasetSize()
+    fun isTraining() = nativeIsTraining()
 }
-
-data class TrainingConfig(
-    val epochs: Int = 3,
-    val batchSize: Int = 4,
-    val learningRate: Float = 2e-4f,
-    val gradientAccumSteps: Int = 4,
-    val maxGradNorm: Float = 1.0f,
-    val loraRank: Int = 8,
-    val loraAlpha: Float = 16.0f,
-    val seqLen: Int = 128
-)
