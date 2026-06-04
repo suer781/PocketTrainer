@@ -46,6 +46,7 @@ class ModelRepository(private val context: Context) {
                     }
                 }
             }
+            if (!validateModelFile(outputFile)) { outputFile.delete(); modelDir.delete(); throw Exception("Invalid model file format (expected GGUF or SafeTensors)") }
             Result.success(modelDir.absolutePath)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -58,7 +59,20 @@ class ModelRepository(private val context: Context) {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 outputFile.outputStream().use { output -> input.copyTo(output) }
             } ?: throw Exception("Cannot open URI")
+            if (!validateModelFile(outputFile)) { outputFile.delete(); modelDir.delete(); throw Exception("Invalid model file format (expected GGUF or SafeTensors)") }
             Result.success(modelDir.absolutePath)
         } catch (e: Exception) { Result.failure(e) }
+    }
+
+    private fun validateModelFile(file: File): Boolean {
+        if (!file.exists() || file.length() < 8) return false
+        val header = file.inputStream().use { it.readNBytes(8) }
+        // GGUF magic: 0x46475547 ("GGUF" in LE)
+        if (header[0] == 0x47.toByte() && header[1] == 0x55.toByte() &&
+            header[2] == 0x46.toByte() && header[3] == 0x47.toByte()) return true
+        // SafeTensors: first 8 bytes = header length (LE uint64, must be reasonable)
+        val hlen = header.foldIndexed(0L) { i, acc, b -> acc or ((b.toLong() and 0xFF) shl (i * 8)) }
+        if (hlen in 1..1_000_000_000L) return true
+        return false
     }
 }
