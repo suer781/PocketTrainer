@@ -1,13 +1,12 @@
 # PocketTrainer ProGuard Rules
 
 # Keep JNI native methods
--keepclasseswithmembernames class * {
+-keepclasseswithmembernames class com.pockettrainer.training.NativeTraining {
     native <methods>;
 }
 
-# Keep NativeTraining class
--keep class com.pockettrainer.training.NativeTraining { *; }
--keep class com.pockettrainer.training.NativeTraining$* { *; }
+# Keep training callback interface (called from JNI)
+-keep class com.pockettrainer.training.TrainingCallback { *; }
 
-# Keep data classes
+# Keep data classes used by JNI
 -keep class com.pockettrainer.data.** { *; }
