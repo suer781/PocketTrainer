@@ -275,7 +275,7 @@ private fun TrainingCompleteStep(state: com.pockettrainer.training.UiState) {
             ListItem(headlineContent = { Text("输出路径") }, supportingContent = { Text(state.outputPath.ifEmpty { "未指定" }, fontSize = 13.sp) }, leadingContent = { Icon(Icons.Default.Folder, null) })
         }
         Spacer(Modifier.height(24.dp))
-        OutlinedButton(onClick = { /* TODO: 导出模型 */ }, Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("导出模型") }
+        OutlinedButton(onClick = { viewModel.exportLora(context) }, Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("导出模型") }
     }
 }
 
