@@ -1,9 +1,12 @@
 package com.pockettrainer.data
 
 import android.content.Context
+import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class ModelRepository(private val context: Context) {
     private val modelsDir: File by lazy { File(context.filesDir, "models").also { it.mkdirs() } }
@@ -12,5 +15,50 @@ class ModelRepository(private val context: Context) {
         return modelsDir.listFiles()?.filter { it.isDirectory }?.filter { dir ->
             dir.listFiles()?.any { it.name.endsWith(".safetensors") || it.name.endsWith(".gguf") } == true
         } ?: emptyList()
+    }
+
+    suspend fun importFromUrl(
+        urlStr: String,
+        onProgress: (Float) -> Unit = {}
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(urlStr)
+            val filename = url.path.substringAfterLast('/').ifBlank { "model.safetensors" }
+            val modelDir = File(modelsDir, filename.removeSuffix(".safetensors").removeSuffix(".gguf")).also { it.mkdirs() }
+            val outputFile = File(modelDir, filename)
+
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 30_000
+            conn.connect()
+            if (conn.responseCode != 200) throw Exception("HTTP ${conn.responseCode}")
+
+            val totalSize = conn.contentLength.toLong()
+            conn.inputStream.use { input ->
+                outputFile.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead = 0L
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                        bytesRead += read
+                        if (totalSize > 0) onProgress(bytesRead.toFloat() / totalSize)
+                    }
+                }
+            }
+            Result.success(modelDir.absolutePath)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun importFromUri(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "model.safetensors"
+            val modelDir = File(modelsDir, fileName.removeSuffix(".safetensors").removeSuffix(".gguf")).also { it.mkdirs() }
+            val outputFile = File(modelDir, fileName)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                outputFile.outputStream().use { output -> input.copyTo(output) }
+            } ?: throw Exception("Cannot open URI")
+            Result.success(modelDir.absolutePath)
+        } catch (e: Exception) { Result.failure(e) }
     }
 }
