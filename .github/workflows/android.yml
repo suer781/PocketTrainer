@@ -22,17 +22,37 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Setup NDK
+        run: |
+          ANDROID_HOME=$ANDROID_HOME
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.2.12479018" 2>&1 | tail -5
+          echo "ndk.dir=$ANDROID_HOME/ndk/27.2.12479018" >> local.properties
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Verify submodule
+      - name: Verify submodule and operator lib
         run: |
-          ls -la app/src/main/cpp/third_party/MobileFineTuner/operator/ | head -20
+          echo "=== Operator files ==="
+          ls app/src/main/cpp/third_party/MobileFineTuner/operator/ | head -10
+          echo "=== JNI source ==="
+          head -5 app/src/main/cpp/training_jni.cpp
+          echo "=== CMakeLists ==="
+          head -20 app/src/main/cpp/CMakeLists.txt
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -300
+        run: ./gradlew assembleDebug --no-daemon --info 2>&1 | tail -400
+
+      - name: Verify native .so
+        run: |
+          echo "=== Checking .so files ==="
+          find app/build -name "libpocket_trainer.so" -exec ls -la {} \;
+          find app/build -name "liboperators.a" -exec ls -la {} \;
+          echo "=== APK contents ==="
+          find app/build/outputs/apk -name "*.apk" -exec unzip -l {} \; | grep "\.so" | head -20
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -46,4 +66,6 @@ jobs:
         if: failure()
         with:
           name: build-logs
-          path: app/build/outputs/
+          path: |
+            app/build/outputs/
+            app/build/reports/
