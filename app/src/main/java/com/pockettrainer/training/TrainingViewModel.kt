@@ -24,6 +24,7 @@ data class TrainingUiState(
     val selectedModel: ModelInfo? = null,
     val datasetPath: String = "",
     val datasetName: String = "",
+    val systemPrompt: String = "",
     val trainingState: TrainingState = TrainingState.IDLE,
     val errorMessage: String? = null,
     val currentEpoch: Int = 0,
@@ -181,6 +182,12 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // ── 系统提示词 ──
+
+    fun setSystemPrompt(prompt: String) {
+        _uiState.update { it.copy(systemPrompt = prompt) }
+    }
+
     // ── 训练 ──
 
     fun startTraining(
@@ -242,6 +249,7 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             NativeTraining.nativeStartTrainingAsync(
                 datasetPath = dsPath,
                 outputPath = outputDir.absolutePath,
+                systemPrompt = _uiState.value.systemPrompt,
                 epochs = epochs, batchSize = batchSize,
                 learningRate = learningRate,
                 loraRank = loraRank, loraAlpha = loraAlpha,
