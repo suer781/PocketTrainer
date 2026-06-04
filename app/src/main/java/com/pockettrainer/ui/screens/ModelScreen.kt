@@ -58,7 +58,23 @@ fun RecommendedTab() {
                     }
                     Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { /* TODO: 下载 */ }, Modifier.fillMaxWidth()) {
+                    Button(onClick = { viewModelScope.launch {
+                        isDownloading.value = true
+                        try {
+                            val mm = ModelManager(context)
+                            val dest = mm.modelsDir.resolve(model.id)
+                            if (!dest.exists()) dest.mkdirs()
+                            val weights = dest.resolve("model.gguf")
+                            if (!weights.exists()) {
+                                val url = mm.getDownloadUrl(model)
+                                java.net.URL(url).openStream().use { inp ->
+                                    weights.outputStream().use { out -> inp.copyTo(out) }
+                                }
+                            }
+                            onComplete(weights.absolutePath)
+                        } catch (e: Exception) { onComplete(null) }
+                        finally { isDownloading.value = false }
+                    } }, Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Download, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("下载模型")
