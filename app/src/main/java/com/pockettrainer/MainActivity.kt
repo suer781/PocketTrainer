@@ -33,7 +33,8 @@ fun MainApp() {
         BottomNavItem("home", "首页", Icons.Default.Home),
         BottomNavItem("models", "模型", Icons.Default.SmartToy),
         BottomNavItem("train", "训练", Icons.Default.PlayArrow),
-        BottomNavItem("settings", "设置", Icons.Default.Settings),
+        BottomNavItem("dataset", "数据集", Icons.Default.Storage),
+        BottomNavItem("cluster", "集群", Icons.Default.Hub),
     )
 
     Scaffold(
@@ -62,6 +63,8 @@ fun MainApp() {
             composable("home") { HomeScreen(navController) }
             composable("models") { ModelScreen(navController) }
             composable("train") { TrainScreen(navController) }
+            composable("dataset") { DatasetScreen(navController) }
+            composable("cluster") { ClusterScreen(navController) }
             composable("settings") { SettingsScreen(navController) }
         }
     }
