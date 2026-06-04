@@ -1,16 +1,13 @@
 package com.pockettrainer.training
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
 
 data class ModelInfo(
     val path: String,
@@ -25,6 +22,8 @@ enum class TrainingState {
 data class TrainingUiState(
     val availableModels: List<ModelInfo> = emptyList(),
     val selectedModel: ModelInfo? = null,
+    val datasetPath: String = "",
+    val datasetName: String = "",
     val trainingState: TrainingState = TrainingState.IDLE,
     val errorMessage: String? = null,
     val currentEpoch: Int = 0,
@@ -65,35 +64,24 @@ data class TrainingUiState(
     val formattedFileSize: String
         get() = selectedModel?.let { "%.1f MB".format(it.fileSizeMb) } ?: "未选择"
 
-    // 趋势方向：-1 下降, 0 持平, 1 上升
+    val canStartTraining: Boolean
+        get() = trainingState == TrainingState.READY && datasetPath.isNotEmpty()
+
     val lossTrendDirection: Int
         get() {
             if (lossHistory.size < 5) return 0
             val recent = lossHistory.takeLast(5)
             val avg1 = recent.take(2).average()
             val avg2 = recent.takeLast(2).average()
-            val diff = avg2 - avg1
             return when {
-                diff < -0.01 -> -1
-                diff > 0.01  -> 1
+                avg2 - avg1 < -0.01 -> -1
+                avg2 - avg1 > 0.01  -> 1
                 else -> 0
             }
         }
 
     val lossTrendIcon: String
-        get() = when (lossTrendDirection) {
-            -1   -> "📉"
-            1    -> "📈"
-            else -> "➡️"
-        }
-
-    // LoRA 消耗估算
-    val loraMemoryMb: Double
-        get() {
-            if (lossHistory.isEmpty()) return 0.0
-            val paramCount = 35_000_000L  // 估算
-            return paramCount * 2L / 1_048_576.0
-        }
+        get() = when (lossTrendDirection) { -1 -> "📉"; 1 -> "📈"; else -> "➡️" }
 }
 
 class TrainingViewModel(application: Application) : AndroidViewModel(application) {
@@ -108,7 +96,8 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { scanModels() }
     }
 
-    /** 扫描 Download/PocketTrainer/models/ 下的 .safetensors 文件 */
+    // ── 模型 ──
+
     private fun scanModels() {
         val modelsDir = File(context.getExternalFilesDir(null), "models")
         if (!modelsDir.exists()) modelsDir.mkdirs()
@@ -116,13 +105,8 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         val models = modelsDir.listFiles()
             ?.filter { it.extension == "safetensors" }
             ?.map { f ->
-                ModelInfo(
-                    path = f.absolutePath,
-                    fileName = f.name,
-                    fileSizeMb = f.length() / (1024.0 * 1024.0)
-                )
-            }
-            ?: emptyList()
+                ModelInfo(f.absolutePath, f.name, f.length() / (1024.0 * 1024.0))
+            } ?: emptyList()
 
         _uiState.update { it.copy(availableModels = models) }
     }
@@ -131,6 +115,31 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(selectedModel = model, trainingState = TrainingState.IDLE) }
     }
 
+    /** 从外部 URI 导入模型文件（复制到 models/ 目录） */
+    fun importModelFromUri(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val modelsDir = File(context.getExternalFilesDir(null), "models").apply { mkdirs() }
+                // 从 URI 推断文件名
+                val fileName = getFileNameFromUri(uri) ?: "model_${System.currentTimeMillis()}.safetensors"
+                val outFile = File(modelsDir, fileName)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    outFile.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw Exception("无法读取文件")
+
+                scanModels()
+                // 自动选中刚导入的
+                val imported = _uiState.value.availableModels.find { it.path == outFile.absolutePath }
+                imported?.let { selectModel(it) }
+
+                _uiState.update { it.copy(outputPath = "已导入: $fileName") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "导入失败: ${e.message}", trainingState = TrainingState.ERROR) }
+            }
+        }
+    }
+
+    /** 加载选中的基座模型 */
     fun loadModel() {
         val model = _uiState.value.selectedModel ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -142,15 +151,39 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
                 if (ptr == 0L) throw Exception("模型加载失败")
                 _uiState.update { it.copy(trainingState = TrainingState.READY) }
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(trainingState = TrainingState.ERROR, errorMessage = e.message)
-                }
+                _uiState.update { it.copy(trainingState = TrainingState.ERROR, errorMessage = e.message) }
             }
         }
     }
 
+    // ── 数据集 ──
+
+    /** 从外部 URI 导入数据集文件 */
+    fun importDatasetFromUri(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val dataDir = File(context.getExternalFilesDir(null), "datasets").apply { mkdirs() }
+                val fileName = getFileNameFromUri(uri) ?: "dataset_${System.currentTimeMillis()}.txt"
+                val outFile = File(dataDir, fileName)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    outFile.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw Exception("无法读取文件")
+
+                _uiState.update {
+                    it.copy(
+                        datasetPath = outFile.absolutePath,
+                        datasetName = fileName
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "数据集导入失败: ${e.message}", trainingState = TrainingState.ERROR) }
+            }
+        }
+    }
+
+    // ── 训练 ──
+
     fun startTraining(
-        datasetPath: String,
         epochs: Int = 1,
         batchSize: Int = 1,
         learningRate: Float = 2e-5f,
@@ -158,7 +191,9 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         loraAlpha: Float = 16f,
         nThreads: Int = 4
     ) {
-        // 注册回调
+        val dsPath = _uiState.value.datasetPath
+        if (dsPath.isEmpty()) return
+
         NativeTraining.nativeSetCallback(object : TrainingCallback {
             override fun onProgress(epoch: Int, totalEpochs: Int, step: Int, totalSteps: Int, loss: Float) {
                 viewModelScope.launch(Dispatchers.Main) {
@@ -168,17 +203,13 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
                     val remaining = if (totalProgress > 0.01f)
                         (elapsed * (1 - totalProgress) / totalProgress).toLong() else 0L
 
-                    _uiState.update { state ->
-                        state.copy(
+                    _uiState.update { s ->
+                        s.copy(
                             trainingState = TrainingState.RUNNING,
-                            currentEpoch = epoch,
-                            totalEpochs = totalEpochs,
-                            currentStep = step,
-                            totalSteps = totalSteps,
-                            currentLoss = loss,
-                            lossHistory = state.lossHistory + loss,
-                            elapsedMs = elapsed,
-                            estimatedRemainingMs = remaining,
+                            currentEpoch = epoch, totalEpochs = totalEpochs,
+                            currentStep = step, totalSteps = totalSteps,
+                            currentLoss = loss, lossHistory = s.lossHistory + loss,
+                            elapsedMs = elapsed, estimatedRemainingMs = remaining,
                             progressPercent = totalProgress
                         )
                     }
@@ -188,20 +219,16 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             override fun onComplete(outputPath: String) {
                 viewModelScope.launch(Dispatchers.Main) {
                     _uiState.update {
-                        it.copy(
-                            trainingState = TrainingState.COMPLETED,
+                        it.copy(trainingState = TrainingState.COMPLETED,
                             outputPath = outputPath,
-                            elapsedMs = System.currentTimeMillis() - startTimeMs
-                        )
+                            elapsedMs = System.currentTimeMillis() - startTimeMs)
                     }
                 }
             }
 
             override fun onError(message: String) {
                 viewModelScope.launch(Dispatchers.Main) {
-                    _uiState.update {
-                        it.copy(trainingState = TrainingState.ERROR, errorMessage = message)
-                    }
+                    _uiState.update { it.copy(trainingState = TrainingState.ERROR, errorMessage = message) }
                 }
             }
         })
@@ -213,13 +240,11 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             val outputDir = File(context.getExternalFilesDir(null), "lora_output").apply { mkdirs() }
 
             NativeTraining.nativeStartTrainingAsync(
-                datasetPath = datasetPath,
+                datasetPath = dsPath,
                 outputPath = outputDir.absolutePath,
-                epochs = epochs,
-                batchSize = batchSize,
+                epochs = epochs, batchSize = batchSize,
                 learningRate = learningRate,
-                loraRank = loraRank,
-                loraAlpha = loraAlpha,
+                loraRank = loraRank, loraAlpha = loraAlpha,
                 nThreads = nThreads
             )
         }
@@ -238,10 +263,8 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
     fun stopTraining() {
         NativeTraining.nativeStopTraining()
         _uiState.update {
-            it.copy(
-                trainingState = TrainingState.COMPLETED,
-                elapsedMs = System.currentTimeMillis() - startTimeMs
-            )
+            it.copy(trainingState = TrainingState.COMPLETED,
+                elapsedMs = System.currentTimeMillis() - startTimeMs)
         }
     }
 
@@ -251,10 +274,8 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             val outFile = File(exportDir, "lora_weights.safetensors")
             val ok = NativeTraining.nativeExportModel(outFile.absolutePath)
             _uiState.update {
-                it.copy(
-                    outputPath = if (ok) outFile.absolutePath else "导出失败",
-                    errorMessage = if (!ok) "导出失败" else null
-                )
+                it.copy(outputPath = if (ok) outFile.absolutePath else "导出失败",
+                    errorMessage = if (!ok) "导出失败" else null)
             }
         }
     }
@@ -262,5 +283,16 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         NativeTraining.nativeCleanup()
+    }
+
+    private fun getFileNameFromUri(uri: Uri): String? {
+        var name: String? = null
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && cursor.moveToFirst()) {
+                name = cursor.getString(idx)
+            }
+        }
+        return name
     }
 }
