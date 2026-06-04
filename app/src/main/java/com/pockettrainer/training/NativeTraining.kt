@@ -1,39 +1,49 @@
 package com.pockettrainer.training
 
-class NativeTraining {
-    companion object { init { System.loadLibrary("pocket_trainer") } }
-
-    interface TrainingCallback {
-        fun onProgress(epoch: Int, totalEpochs: Int, step: Int, loss: Float)
-        fun onComplete(success: Boolean, message: String)
-        fun onError(error: String)
+/**
+ * JNI 桥接层 — 函数名严格匹配 training_jni.cpp
+ */
+object NativeTraining {
+    init {
+        System.loadLibrary("pocket_trainer")
     }
 
-    external fun nativeInitialize(modelDirPath: String, numThreads: Int): Boolean
-    external fun nativeSetupLoRA(rank: Int, alpha: Float): Boolean
-    external fun nativeLoadDataset(dataPath: String, seqLen: Int, batchSize: Int): Boolean
-    external fun nativeTrain(epochs: Int, gradAccumSteps: Int, learningRate: Float, maxGradNorm: Float, callback: TrainingCallback): Boolean
-    external fun nativeSave(outputPath: String): Boolean
-    external fun nativeStop()
-    external fun nativePause()
-    external fun nativeResume()
-    external fun nativeRelease()
-    external fun nativeGetLoRAParamCount(): Int
-    external fun nativeGetModelInfo(): String
-    external fun nativeGetDatasetSize(): Int
-    external fun nativeIsTraining(): Boolean
+    /** 注册回调（C++ 通过它回传进度/完成/错误） */
+    external fun nativeSetCallback(callback: TrainingCallback?)
 
-    fun initialize(modelDirPath: String, numThreads: Int = 0) = nativeInitialize(modelDirPath, numThreads)
-    fun setupLoRA(rank: Int = 8, alpha: Float = 16.0f) = nativeSetupLoRA(rank, alpha)
-    fun prepareData(dataPath: String, seqLen: Int = 128, batchSize: Int = 4) = nativeLoadDataset(dataPath, seqLen, batchSize)
-    fun train(config: TrainingConfig, callback: TrainingCallback) = nativeTrain(config.epochs, config.gradientAccumSteps, config.learningRate, config.maxGradNorm, callback)
-    fun save(outputPath: String) = nativeSave(outputPath)
-    fun stop() = nativeStop()
-    fun pause() = nativePause()
-    fun resume() = nativeResume()
-    fun release() = nativeRelease()
-    fun getLoRAParamCount() = nativeGetLoRAParamCount()
-    fun getModelInfo() = nativeGetModelInfo()
-    fun getDatasetSize() = nativeGetDatasetSize()
-    fun isTraining() = nativeIsTraining()
+    /** 从 safetensors 推断模型配置 */
+    external fun nativeLoadConfig(path: String): Long
+
+    /** 加载模型权重 + 注入 LoRA，返回模型指针 */
+    external fun nativeLoadModel(path: String): Long
+
+    /** 同步训练（阻塞当前线程） */
+    external fun nativeStartTraining(
+        datasetPath: String,
+        outputPath: String,
+        epochs: Int,
+        batchSize: Int,
+        learningRate: Float,
+        loraRank: Int,
+        loraAlpha: Float,
+        nThreads: Int
+    ): Boolean
+
+    /** 异步训练（后台线程，通过回调通知进度） */
+    external fun nativeStartTrainingAsync(
+        datasetPath: String,
+        outputPath: String,
+        epochs: Int,
+        batchSize: Int,
+        learningRate: Float,
+        loraRank: Int,
+        loraAlpha: Float,
+        nThreads: Int
+    )
+
+    external fun nativePauseTraining()
+    external fun nativeResumeTraining()
+    external fun nativeStopTraining()
+    external fun nativeExportModel(outputPath: String): Boolean
+    external fun nativeCleanup()
 }
