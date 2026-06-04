@@ -219,7 +219,19 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         }
 
         // ══════════════════════════════════════
-        // 第四步：训练
+        // 第四步：高级参数（可选）
+        // ══════════════════════════════════════
+        item {
+            AdvancedOptionsPanel(
+                config = uiState.config,
+                isExpanded = uiState.showAdvanced,
+                onToggle = { viewModel.toggleAdvanced() },
+                onUpdate = { updater -> viewModel.updateConfig(updater) }
+            )
+        }
+
+        // ══════════════════════════════════════
+        // 第五步：训练
         // ══════════════════════════════════════
         if (uiState.trainingState in listOf(
                 TrainingState.READY, TrainingState.RUNNING,
