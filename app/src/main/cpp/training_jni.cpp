@@ -158,10 +158,13 @@ Java_com_pockettrainer_training_NativeTraining_nativeLoadConfig(
         }
         g_config->n_layer = max_layer + 1;
 
-        // 推断 n_head
+        // 推断 n_head (head_dim=64 for all GPT-2 variants)
         for (const auto& [name, info] : header.tensors) {
             if (name.find("attn.c_attn.weight") != std::string::npos && info.shape.size() == 2) {
-                g_config->n_head = 12;
+                // c_attn.weight shape: [n_embd, 3*n_embd]
+                // head_dim = n_embd / n_head = 64
+                g_config->n_head = g_config->n_embd > 0 ? g_config->n_embd / 64 : 12;
+                if (g_config->n_head < 1) g_config->n_head = 12;
                 break;
             }
         }
