@@ -188,24 +188,67 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
 
     private fun extractModelMetadata(path: String): ModelMetadata {
         return try {
-            // 尝试从文件名推断
             val name = File(path).name.lowercase()
-            val paramCount = when {
+            val file = File(path)
+            
+            // 从 safetensors header 读取真实参数量
+            val paramCount = if (name.endsWith(".safetensors")) {
+                try {
+                    file.inputStream().use { fis ->
+                        val buf = ByteArray(8)
+                        if (fis.read(buf) == 8) {
+                            val headerLen = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.LITTLE_ENDIAN).long
+                            if (headerLen in 1..10_000_000) {
+                                val headerBuf = ByteArray(headerLen.toInt())
+                                fis.read(headerBuf)
+                                val header = String(headerBuf)
+                                var totalParams = 0L
+                                val shapePattern = Regex("\"shape\":\\s*\\[([\\d,\\s]+)\\]\"")
+                                for (m in shapePattern.findAll(header)) {
+                                    val dims = m.groupValues[1].split(",").map { it.trim().toLongOrNull() ?: 1L }
+                                    totalParams += dims.fold(1L) { a, b -> a * b }
+                                }
+                                if (totalParams > 0) {
+                                    when {
+                                        totalParams < 1_000_000_000 -> String.format("~%.1fM", totalParams / 1_000_000.0)
+                                        else -> String.format("~%.1fB", totalParams / 1_000_000_000.0)
+                                    }
+                                } else null
+                            } else null
+                        } else null
+                    }
+                } catch (_: Exception) { null
+            } else null
+            
+            // 如果 safetensors 读取失败，从文件名推断
+            val finalParamCount = paramCount ?: when {
                 "0.5b" in name || "500m" in name -> "0.5B"
                 "1b" in name || "1.0b" in name   -> "1B"
                 "1.5b" in name || "1_5b" in name  -> "1.5B"
                 "3b" in name || "3.0b" in name    -> "3B"
                 "7b" in name || "7.0b" in name    -> "7B"
                 else -> {
-                    // 从文件大小粗略估算
-                    val sizeMb = File(path).length() / (1024.0 * 1024.0)
+                    // 从文件大小粗略估算 (Q4量化约1.5 bytes/param)
+                    val sizeMb = file.length() / (1024.0 * 1024.0)
+                    val estParams = (sizeMb * 1_000_000 / 1.5).toLong()
                     when {
-                        sizeMb < 500  -> "~0.5B"
-                        sizeMb < 1200 -> "~1B"
-                        sizeMb < 2000 -> "~1.5B"
-                        sizeMb < 5000 -> "~3B"
-                        else          -> "~7B+"
+                        estParams < 1_000_000_000 -> String.format("~%.1fM", estParams / 1_000_000.0)
+                        else -> String.format("~%.1fB", estParams / 1_000_000_000.0)
                     }
+                }
+            }
+            val arch = when {
+                "qwen" in name -> "Qwen"
+                "deepseek" in name -> "DeepSeek"
+                "llama" in name -> "LLaMA"
+                "mistral" in name -> "Mistral"
+                "phi" in name -> "Phi"
+                "gemma" in name -> "Gemma"
+                else -> "Unknown"
+            }
+            ModelMetadata(paramCount = finalParamCount, architecture = arch)
+        } catch (_: Exception) { ModelMetadata() }
+    }
                 }
             }
             val arch = when {
@@ -253,7 +296,7 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         val charCount = text.length
         // 按空行分段算样本数
         val samples = text.split(Regex("\n\\s*\n")).filter { it.isNotBlank() }.size.coerceAtLeast(1)
-        val estimatedTokens = (charCount / 3.5).toInt()  // 中文约 3.5 字符/token
+        val estimatedTokens = run { var cjk = 0; var ascii = 0; for (ch in text) { if (ch.code in 0x2E80..0x9FFF || ch.code in 0xF900..0xFAFF) cjk++ else ascii++ }; (cjk / 1.5 + ascii / 4.0).toInt() }
         // 粗估训练时间：每 1000 token 约 0.5 秒（端侧单线程）
         val estimatedMinutes = estimatedTokens * 0.5f / 60f * _uiState.value.config.epochs
         return DatasetStats(samples, charCount, estimatedTokens, estimatedMinutes)
@@ -446,6 +489,6 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
             if (idx >= 0 && cursor.moveToFirst()) name = cursor.getString(idx)
         }
-        return name
+        return name ?: uri.path?.substringAfterLast("/")
     }
 }
