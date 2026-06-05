@@ -250,20 +250,6 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             ModelMetadata(paramCount = finalParamCount, architecture = arch)
         } catch (_: Exception) { ModelMetadata() }
     }
-                }
-            }
-            val arch = when {
-                "qwen" in name -> "Qwen"
-                "deepseek" in name -> "DeepSeek"
-                "llama" in name -> "LLaMA"
-                "mistral" in name -> "Mistral"
-                "phi" in name -> "Phi"
-                "gemma" in name -> "Gemma"
-                else -> "Unknown"
-            }
-            ModelMetadata(paramCount = paramCount, architecture = arch)
-        } catch (_: Exception) { ModelMetadata() }
-    }
 
     // ── 数据源 ──
 

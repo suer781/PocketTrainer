@@ -182,7 +182,7 @@ private:
 
         cJSON_Delete(j);
         return result;
-    }}
+    }
 
     static std::vector<std::string> load_json_like(const std::string& path, bool line_by_line) {
         std::vector<std::string> texts;

@@ -1,4 +1,5 @@
 // loRA_trainer.cpp — Training loop with pause/stop/callback + LR scheduling + early stopping
+#include <thread>
 #include "loRA_trainer.h"
 #include "core/tensor.h"
 #include "core/lm_loss.h"
@@ -46,14 +47,14 @@ void LoRATrainer::apply_gradient_clipping() {
     float total_norm_sq = 0.0f;
     for (const auto& p : params) {
         if (p && p->grad()) {
-            float n = p->grad()->norm().item<float>();
+            float n = (float)std::sqrt(p->grad()->dot(*p->grad()).item<float>());
             total_norm_sq += n * n;
         }
     }
     float total_norm = std::sqrt(total_norm_sq);
     if (total_norm > config_.max_grad_norm) {
         float s = config_.max_grad_norm / (total_norm + 1e-6f);
-        for (const auto& p : params) { if (p && p->grad()) p->grad()->mul_(s); }
+        for (const auto& p : params) { if (p && p->grad()) p->grad()->data() *= s; }
     }
 }
 
@@ -67,7 +68,7 @@ float LoRATrainer::run_evaluation() {
         if (bs <= 0) break;
         auto batch = eval_ds_.get_batch(i, bs);
         auto logits = model_.forward(batch.input_ids, batch.attention_mask);
-        auto loss = ops::lm_loss(logits, batch.labels);
+        auto loss = ops::lm_cross_entropy(logits, batch.labels, -100, "mean");
         total_loss += loss.item<float>(); n++;
         if (n >= 10) break;
     }
@@ -77,7 +78,7 @@ float LoRATrainer::run_evaluation() {
 void LoRATrainer::save_checkpoint(int step) {
     std::string p = config_.output_dir + "/checkpoint-step" + std::to_string(step);
     LOGI("Saving checkpoint: %s", p.c_str());
-    try { ops::LoraSaver().save(model_, lora_, p); }
+    try { ops::LoraSaver::save_safetensors(p, model_); }
     catch (const std::exception& e) { LOGE("Checkpoint failed: %s", e.what()); }
 }
 
@@ -88,9 +89,9 @@ float LoRATrainer::train() {
     int total = spe * config_.num_epochs;
     LOGI("Training: %d samples, %d steps/epoch, %d total", ds, spe, total);
 
-    ops::Adam opt; opt.set_lr(config_.learning_rate);
+    ops::AdamConfig opt_cfg(config_.learning_rate); ops::Adam opt(opt_cfg);
     auto lp = lora_.collect_lora_parameters();
-    for (const auto& p : lp) opt.add_param(p);
+    for (const auto& p : lp) opt.add_param_group({p});
 
     float run_loss = 0.f; int accum = 0, gs = 0;
     float best_eval = 1e9f; int patience = 0;
@@ -108,7 +109,7 @@ float LoRATrainer::train() {
             if (bs <= 0) break;
             auto batch = train_ds_.get_batch(si * config_.batch_size, bs);
             auto logits = model_.forward(batch.input_ids, batch.attention_mask);
-            auto loss = ops::lm_loss(logits, batch.labels);
+            auto loss = ops::lm_cross_entropy(logits, batch.labels, -100, "mean");
             if (config_.gradient_accumulation_steps > 1)
                 loss = loss / static_cast<float>(config_.gradient_accumulation_steps);
             loss.backward();
@@ -118,7 +119,7 @@ float LoRATrainer::train() {
             if (accum >= config_.gradient_accumulation_steps) {
                 apply_gradient_clipping();
                 float lr = compute_learning_rate(gs, total);
-                opt.set_lr(lr); opt.step(); opt.zero_grad();
+                opt.set_learning_rate(lr); opt.step(); opt.zero_grad();
                 gs++; accum = 0;
 
                 if (gs % config_.logging_steps == 0) {
