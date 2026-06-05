@@ -97,7 +97,7 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         item {
             Button(
                 onClick = { viewModel.loadModel() },
-                enabled = uiState.selectedModel != null && uiState.trainingState in listOf(TrainingState.IDLE, TrainingState.ERROR),
+                enabled = uiState.selectedModel != null && uiState.trainingState in listOf(TrainingState.IDLE, TrainingState.ERROR, TrainingState.STOPPED),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.CloudDownload, null); Spacer(Modifier.width(8.dp))
@@ -250,7 +250,7 @@ fun TrainingScreen(viewModel: TrainingViewModel = viewModel()) {
         // ══════════════════════════════════════
         // ⑥ 训练
         // ══════════════════════════════════════
-        if (uiState.trainingState in listOf(TrainingState.READY, TrainingState.RUNNING, TrainingState.PAUSED, TrainingState.COMPLETED)) {
+        if (uiState.trainingState in listOf(TrainingState.READY, TrainingState.RUNNING, TrainingState.PAUSED, TrainingState.COMPLETED, TrainingState.STOPPED)) {
             item { SectionHeader(6, "开始训练", null) }
 
             item {
@@ -393,7 +393,7 @@ fun TrainingControlPanel(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (uiState.trainingState) {
-                    TrainingState.READY, TrainingState.COMPLETED -> {
+                    TrainingState.READY, TrainingState.COMPLETED, TrainingState.STOPPED -> {
                         Button(onClick = onStart, enabled = uiState.canStartTraining, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp))
                             Text(if (!uiState.canStartTraining) "请先输入训练数据" else "开始训练")

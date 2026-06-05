@@ -37,7 +37,7 @@ data class DatasetStats(
 )
 
 enum class TrainingState {
-    IDLE, LOADING, READY, RUNNING, PAUSED, COMPLETED, ERROR
+    IDLE, LOADING, READY, RUNNING, PAUSED, COMPLETED, STOPPED, ERROR
 }
 
 enum class DataSourceMode {
@@ -153,7 +153,8 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val modelsDir = File(context.getExternalFilesDir(null), "models").apply { mkdirs() }
-                val fileName = getFileNameFromUri(uri) ?: "model_${System.currentTimeMillis()}.safetensors"
+        val rawName = getFileNameFromUri(uri) ?: ("model_" + System.currentTimeMillis() + ".safetensors")
+        val fileName = rawName.substringAfterLast("/").replace("..", "_")
                 val outFile = File(modelsDir, fileName)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     outFile.outputStream().use { output -> input.copyTo(output) }
@@ -409,13 +410,13 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
     fun resumeTraining() { NativeTraining.nativeResumeTraining(); _uiState.update { it.copy(trainingState = TrainingState.RUNNING) } }
     fun stopTraining() {
         NativeTraining.nativeStopTraining()
-        _uiState.update { it.copy(trainingState = TrainingState.COMPLETED, elapsedMs = System.currentTimeMillis() - startTimeMs) }
+        _uiState.update { it.copy(trainingState = TrainingState.STOPPED, elapsedMs = System.currentTimeMillis() - startTimeMs) }
     }
 
     fun exportModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val exportDir = File(context.getExternalFilesDir(null), "export").apply { mkdirs() }
-            val outFile = File(exportDir, "lora_weights.safetensors")
+        val outFile = File(exportDir, "lora_weights_" + System.currentTimeMillis() + ".safetensors")
             val ok = NativeTraining.nativeExportModel(outFile.absolutePath)
             _uiState.update {
                 it.copy(outputPath = if (ok) outFile.absolutePath else "导出失败",
@@ -481,7 +482,12 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
 
     fun clearError() { _uiState.update { it.copy(error = null) } }
 
-    override fun onCleared() { super.onCleared(); NativeTraining.nativeCleanup() }
+    override fun onCleared() {
+        val st = _uiState.value.trainingState
+        if (st == TrainingState.RUNNING || st == TrainingState.PAUSED) NativeTraining.nativeStopTraining()
+        super.onCleared()
+        NativeTraining.nativeCleanup()
+    }
 
     private fun getFileNameFromUri(uri: Uri): String? {
         var name: String? = null
