@@ -30,6 +30,7 @@ jobs:
 
       - name: Setup NDK
         run: |
+          set -eo pipefail
           ANDROID_HOME=$ANDROID_HOME
           echo "ANDROID_HOME=$ANDROID_HOME"
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.2.12479018" 2>&1 | tail -5
@@ -51,10 +52,13 @@ jobs:
           head -20 app/src/main/cpp/CMakeLists.txt
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --info 2>&1 | tail -400
+        run: |
+          set -eo pipefail
+          ./gradlew assembleDebug --no-daemon --info 2>&1 | tail -400
 
       - name: Verify native .so
         run: |
+          set -eo pipefail
           echo "=== Checking .so files ==="
           find app/build -name "libpocket_trainer.so" -exec ls -la {} \; 2>/dev/null || echo "No .so found (build may have skipped native)"
           find app/build -name "operators.a" -exec ls -la {} \; 2>/dev/null || true
