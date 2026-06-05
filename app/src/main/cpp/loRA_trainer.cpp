@@ -44,7 +44,7 @@ void LoRATrainer::apply_gradient_clipping() {
     if (config_.max_grad_norm <= 0.0f) return;
     auto params = lora_.collect_lora_parameters();
     float total_norm_sq = 0.0f;
-    for (auto* p : params) {
+    for (const auto& p : params) {
         if (p && p->grad()) {
             float n = p->grad()->norm().item<float>();
             total_norm_sq += n * n;
@@ -53,7 +53,7 @@ void LoRATrainer::apply_gradient_clipping() {
     float total_norm = std::sqrt(total_norm_sq);
     if (total_norm > config_.max_grad_norm) {
         float s = config_.max_grad_norm / (total_norm + 1e-6f);
-        for (auto* p : params) { if (p && p->grad()) p->grad()->mul_(s); }
+        for (const auto& p : params) { if (p && p->grad()) p->grad()->mul_(s); }
     }
 }
 
@@ -90,7 +90,7 @@ float LoRATrainer::train() {
 
     ops::Adam opt; opt.set_lr(config_.learning_rate);
     auto lp = lora_.collect_lora_parameters();
-    for (auto* p : lp) opt.add_param(p);
+    for (const auto& p : lp) opt.add_param(p);
 
     float run_loss = 0.f; int accum = 0, gs = 0;
     float best_eval = 1e9f; int patience = 0;

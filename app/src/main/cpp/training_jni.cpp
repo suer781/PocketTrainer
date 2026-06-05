@@ -26,7 +26,7 @@
 using namespace pocket_trainer;
 
 // ── Global state ────────────────────────────────────────────────
-static std::unique_ptr<GPT2Model>         g_model;
+static std::unique_ptr<ops::GPT2Model>         g_model;
 static std::unique_ptr<LoraInjector>      g_lora_injector;
 static std::unique_ptr<LoRATrainer>       g_trainer;
 static std::unique_ptr<TextDataset>    g_train_ds;
