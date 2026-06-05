@@ -9,6 +9,7 @@ object NativeTraining {
     external fun nativeSetCallback(callback: TrainingCallback?)
     external fun nativeLoadConfig(path: String): Long
     external fun nativeLoadModel(path: String): Long
+    external fun nativeInitTokenizer(vocabPath: String, mergesPath: String): Boolean
 
     external fun nativeStartTrainingAsync(
         datasetPath: String,

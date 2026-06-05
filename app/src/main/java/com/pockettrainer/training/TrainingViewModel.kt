@@ -385,6 +385,21 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
             val prepInt = when (cfg.preprocessing) { "clean" -> 1; "dedup" -> 2; else -> 0 }
             val schedInt = when (cfg.schedulerType) { "linear" -> 0; "cosine" -> 1; "constant" -> 2; "constant_with_warmup" -> 3; else -> 1 }
 
+            // Initialize BPE tokenizer
+            val tokenizerDir = File(context.filesDir, "tokenizer")
+            if (!tokenizerDir.exists()) {
+                tokenizerDir.mkdirs()
+                context.assets.open("tokenizer/vocab.json").use { input ->
+                    File(tokenizerDir, "vocab.json").outputStream().use { output -> input.copyTo(output) }
+                }
+                context.assets.open("tokenizer/merges.txt").use { input ->
+                    File(tokenizerDir, "merges.txt").outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            NativeTraining.nativeInitTokenizer(
+                File(tokenizerDir, "vocab.json").absolutePath,
+                File(tokenizerDir, "merges.txt").absolutePath
+            )
             NativeTraining.nativeStartTrainingAsync(
                 datasetPath = dsPath,
                 outputPath = outputDir.absolutePath,

@@ -13,6 +13,7 @@
 
 #include "gpt2_model.h"
 #include "lora_injector.h"
+#include "bpe_tokenizer.h"
 #include "safetensors_reader.h"
 #include "text_dataset.h"
 #include "wikitext2_dataset.h"
@@ -36,6 +37,8 @@ static bool g_initialized = false;
 
 // ── Training control ────────────────────────────────────────────
 static std::atomic<bool> g_pause_requested{false};
+static BpeTokenizer g_bpe_tokenizer;
+static bool g_bpe_loaded = false;
 static std::atomic<bool> g_stop_requested{false};
 static std::atomic<bool> g_training_active{false};
 static std::thread       g_train_thread;
@@ -183,6 +186,18 @@ Java_com_pockettrainer_training_NativeTraining_nativeLoadConfig(
 JNIEXPORT jlong JNICALL
 Java_com_pockettrainer_training_NativeTraining_nativeLoadModel(
         JNIEnv* env, jobject, jstring jpath) {
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_pockettrainer_training_NativeTraining_nativeInitTokenizer(
+        JNIEnv* env, jobject, jstring vocabPath, jstring mergesPath) {
+    const char* vp = env->GetStringUTFChars(vocabPath, nullptr);
+    const char* mp = env->GetStringUTFChars(mergesPath, nullptr);
+    std::string vocab(vp), merges(mp);
+    env->ReleaseStringUTFChars(vocabPath, vp);
+    env->ReleaseStringUTFChars(mergesPath, mp);
+    g_bpe_loaded = g_bpe_tokenizer.load(vocab, merges);
+    LOGI("BPE tokenizer: loaded=%d vocab_size=%d", g_bpe_loaded, g_bpe_tokenizer.vocab_size());
+    return g_bpe_loaded ? JNI_TRUE : JNI_FALSE;
+}
     std::string path = jstr(env, jpath);
     LOGI("nativeLoadModel: %s", path.c_str());
 
@@ -259,8 +274,11 @@ Java_com_pockettrainer_training_NativeTraining_nativeLoadModel(
                 g_lora_injector->inject(*g_model, _lr_r, _la, _ld);
             }
 
-            g_train_ds = std::make_unique<TextDataset>(dataset_path, _sl, system_prompt, _seed);
-            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, _sl, system_prompt, _seed + 1);
+            BpeTokenizer* bpe = g_bpe_loaded ? &g_bpe_tokenizer : nullptr;
+            g_train_ds = std::make_unique<TextDataset>(_sl, system_prompt, bpe);
+            g_train_ds->load(dataset_path, _seed);
+            g_eval_ds  = std::make_unique<TextDataset>(_sl, system_prompt, bpe);
+            g_eval_ds->load(dataset_path, _seed + 1);
 
             TrainerConfig cfg;
             cfg.num_epochs    = _epochs;
