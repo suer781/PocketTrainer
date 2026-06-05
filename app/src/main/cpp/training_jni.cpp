@@ -297,7 +297,7 @@ Java_com_pockettrainer_training_NativeTraining_nativeLoadModel(
 
         g_jvm->DetachCurrentThread();
     });
-    g_train_thread.detach();
+    // thread is joinable, will be joined on cleanup/stop
 }
 
 // Pause training
@@ -331,6 +331,10 @@ Java_com_pockettrainer_training_NativeTraining_nativeCleanup(
         JNIEnv* env, jobject) {
     LOGI("nativeCleanup");
     g_stop_requested.store(true);
+    // Wait for training thread to finish (max 5s)
+    for (int i = 0; i < 50 && g_training_active.load(); ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    if (g_train_thread.joinable()) g_train_thread.join();
     g_training_active.store(false);
 
     g_trainer.reset();

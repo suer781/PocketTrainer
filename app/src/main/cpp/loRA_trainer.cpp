@@ -59,13 +59,13 @@ void LoRATrainer::apply_gradient_clipping() {
 
 float LoRATrainer::run_evaluation() {
     float total_loss = 0.0f;
-    int n = 0, eval_sz = static_cast<int>(train_ds_.size() * config_.val_split);
+    int n = 0, eval_sz = static_cast<int>(eval_ds_.size() * config_.val_split);
     if (eval_sz <= 0) return 0.0f;
-    int start = train_ds_.size() - eval_sz;
-    for (int i = start; i < train_ds_.size(); i += config_.batch_size) {
-        int bs = std::min(config_.batch_size, train_ds_.size() - i);
+    int start = eval_ds_.size() - eval_sz;
+    for (int i = start; i < eval_ds_.size(); i += config_.batch_size) {
+        int bs = std::min(config_.batch_size, eval_ds_.size() - i);
         if (bs <= 0) break;
-        auto batch = train_ds_.get_batch(i, bs);
+        auto batch = eval_ds_.get_batch(i, bs);
         auto logits = model_.forward(batch.input_ids, batch.attention_mask);
         auto loss = ops::lm_loss(logits, batch.labels);
         total_loss += loss.item<float>(); n++;
