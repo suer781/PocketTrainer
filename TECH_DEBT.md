@@ -4,7 +4,7 @@
 
 ---
 
-## 🔴 P0: Tokenizer 与 GPT-2 BPE 不匹配
+## ~~P0: Tokenizer 与 GPT-2 BPE 不匹配~~ ✅ 已修复
 
 **现状**: `text_dataset.h` 使用字符级 tokenizer——UTF-8 码点直接映射为 token ID。GPT-2 原生使用 BPE (Byte-Pair Encoding)，词表 50257 个 token。
 
@@ -23,7 +23,7 @@
 
 ---
 
-## 🟡 P1: Native JSON 解析脆弱
+## ~~P1: Native JSON 解析脆弱~~ ✅ 已修复
 
 **现状**: `training_jni.cpp` 的 `nativeStartTraining` 用字符串搜索 (`find` + `substr`) 解析 Kotlin 传入的 JSON 配置。
 
