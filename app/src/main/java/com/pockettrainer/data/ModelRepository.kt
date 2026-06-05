@@ -54,7 +54,6 @@ class ModelRepository(private val context: Context) {
 
     suspend fun importFromUri(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "model.safetensors"
             val fileName = sanitizeFilename(uri.lastPathSegment?.substringAfterLast("/") ?: "").ifBlank { "imported_model" }
             val outputFile = File(modelDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->

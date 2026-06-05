@@ -32,7 +32,8 @@ fun DatasetScreen(navController: NavController) {
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
             ctx.contentResolver.openInputStream(it)?.use { inp ->
-                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "dataset.jsonl"
+                val raw = uri.lastPathSegment?.substringAfterLast('/') ?: "dataset.jsonl"
+                val name = raw.replace(Regex("[\\/:*?"<>|]"), "_").take(128).ifEmpty { "dataset.jsonl" }
                 val target = File(dsDir, name)
                 target.outputStream().use { out -> inp.copyTo(out) }
                 datasets = loadDatasets(dsDir)

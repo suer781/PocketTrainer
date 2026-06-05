@@ -258,23 +258,23 @@ private fun getValueForKey(key: String, config: TrainingConfig): String = when (
 }
 
 private fun setValueForKey(key: String, raw: String, old: TrainingConfig): TrainingConfig = when (key) {
-    "epochs"           -> old.copy(epochs = raw.toIntOrNull() ?: old.epochs)
-    "batchSize"        -> old.copy(batchSize = raw.toIntOrNull() ?: old.batchSize)
-    "learningRate"     -> old.copy(learningRate = parseLR(raw) ?: old.learningRate)
-    "loraRank"         -> old.copy(loraRank = raw.toIntOrNull() ?: old.loraRank)
-    "loraAlpha"        -> old.copy(loraAlpha = raw.toFloatOrNull() ?: old.loraAlpha)
-    "loraDropout"      -> old.copy(loraDropout = raw.toFloatOrNull() ?: old.loraDropout)
-    "warmupRatio"      -> old.copy(warmupRatio = raw.toFloatOrNull() ?: old.warmupRatio)
-    "weightDecay"      -> old.copy(weightDecay = raw.toFloatOrNull() ?: old.weightDecay)
-    "maxGradNorm"      -> old.copy(maxGradNorm = raw.toFloatOrNull() ?: old.maxGradNorm)
-    "gradAccumSteps"   -> old.copy(gradAccumSteps = raw.toIntOrNull() ?: old.gradAccumSteps)
-    "maxSeqLen"        -> old.copy(maxSeqLen = raw.toIntOrNull() ?: old.maxSeqLen)
-    "valSplit"         -> old.copy(valSplit = raw.toFloatOrNull() ?: old.valSplit)
-    "earlyStoppingPatience"  -> old.copy(earlyStoppingPatience = raw.toIntOrNull() ?: old.earlyStoppingPatience)
-    "earlyStoppingMinDelta"  -> old.copy(earlyStoppingMinDelta = raw.toFloatOrNull() ?: old.earlyStoppingMinDelta)
-    "saveTotalLimit"   -> old.copy(saveTotalLimit = raw.toIntOrNull() ?: old.saveTotalLimit)
-    "nThreads"         -> old.copy(nThreads = raw.toIntOrNull() ?: old.nThreads)
-    "saveSteps"        -> old.copy(saveSteps = raw.toIntOrNull() ?: old.saveSteps)
+    "epochs"           -> raw.toIntOrNull()?.coerceIn(1, 10000).let { old.copy(epochs = it ?: old.epochs) }
+    "batchSize"        -> raw.toIntOrNull()?.coerceIn(1, 1024).let { old.copy(batchSize = it ?: old.batchSize) }
+    "learningRate"     -> (parseLR(raw)?.coerceIn(1e-7f, 1f)).let { old.copy(learningRate = it ?: old.learningRate) }
+    "loraRank"         -> raw.toIntOrNull()?.coerceIn(1, 256).let { old.copy(loraRank = it ?: old.loraRank) }
+    "loraAlpha"        -> raw.toFloatOrNull()?.coerceIn(0.1f, 1024f).let { old.copy(loraAlpha = it ?: old.loraAlpha) }
+    "loraDropout"      -> raw.toFloatOrNull()?.coerceIn(0f, 0.99f).let { old.copy(loraDropout = it ?: old.loraDropout) }
+    "warmupRatio"      -> raw.toFloatOrNull()?.coerceIn(0f, 0.99f).let { old.copy(warmupRatio = it ?: old.warmupRatio) }
+    "weightDecay"      -> raw.toFloatOrNull()?.coerceIn(0f, 1f).let { old.copy(weightDecay = it ?: old.weightDecay) }
+    "maxGradNorm"      -> raw.toFloatOrNull()?.coerceIn(0.1f, 10f).let { old.copy(maxGradNorm = it ?: old.maxGradNorm) }
+    "gradAccumSteps"   -> raw.toIntOrNull()?.coerceIn(1, 64).let { old.copy(gradAccumSteps = it ?: old.gradAccumSteps) }
+    "maxSeqLen"        -> raw.toIntOrNull()?.coerceIn(32, 4096).let { old.copy(maxSeqLen = it ?: old.maxSeqLen) }
+    "valSplit"         -> raw.toFloatOrNull()?.coerceIn(0.01f, 0.5f).let { old.copy(valSplit = it ?: old.valSplit) }
+    "earlyStoppingPatience"  -> raw.toIntOrNull()?.coerceIn(0, 100).let { old.copy(earlyStoppingPatience = it ?: old.earlyStoppingPatience) }
+    "earlyStoppingMinDelta"  -> raw.toFloatOrNull()?.coerceIn(0f, 1f).let { old.copy(earlyStoppingMinDelta = it ?: old.earlyStoppingMinDelta) }
+    "saveTotalLimit"   -> raw.toIntOrNull()?.coerceIn(1, 100).let { old.copy(saveTotalLimit = it ?: old.saveTotalLimit) }
+    "nThreads"         -> raw.toIntOrNull()?.coerceIn(1, 16).let { old.copy(nThreads = it ?: old.nThreads) }
+    "saveSteps"        -> raw.toIntOrNull()?.coerceIn(1, 100000).let { old.copy(saveSteps = it ?: old.saveSteps) }
     "seed"             -> old.copy(seed = raw.toIntOrNull() ?: old.seed)
     else -> old
 }
