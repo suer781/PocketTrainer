@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 
+import com.pockettrainer.training.NativeTraining
 data class LoraFile(
     val name: String,
     val path: String,

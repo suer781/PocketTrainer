@@ -45,13 +45,13 @@ fun HomeScreen(navController: NavController) {
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Card(Modifier.weight(1f), onClick = { navController.navigate("models") }) {
+                Card(onClick = { navController.navigate("models") }, modifier = Modifier.weight(1f)) {
                     Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.SmartToy, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                         Text("模型管理", fontWeight = FontWeight.Bold)
                     }
                 }
-                Card(Modifier.weight(1f), onClick = { navController.navigate("train") }) {
+                Card(onClick = { navController.navigate("train") }, modifier = Modifier.weight(1f)) {
                     Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                         Text("开始训练", fontWeight = FontWeight.Bold)
@@ -60,7 +60,7 @@ fun HomeScreen(navController: NavController) {
             }
         }
         item {
-            Card(Modifier.fillMaxWidth(), onClick = { navController.navigate("train") }) {
+            Card(onClick = { navController.navigate("train") }, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(16.dp))
