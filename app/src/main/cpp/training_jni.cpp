@@ -207,7 +207,7 @@ Java_com_pockettrainer_training_NativeTraining_nativeInitTokenizer(
             return 0;
         }
 
-        g_model = std::make_unique<GPT2Model>(*g_config);
+        g_model = std::make_unique<ops::GPT2Model>(*g_config);
 
         // 从 safetensors 加载权重
         SafeTensorsReader reader(path);
