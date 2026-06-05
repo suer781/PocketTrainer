@@ -27,8 +27,9 @@ class TextDataset {
 public:
     TextDataset(const std::string& path, int seq_len,
                  const std::string& system_prompt = "",
-                 int seed = 42)
-        : seq_len_(seq_len), system_prompt_(system_prompt)
+                 int seed = 42,
+                 BpeTokenizer* tokenizer = nullptr)
+        : seq_len_(seq_len), system_prompt_(system_prompt), tokenizer_(tokenizer)
     {
         load(path);
         if (token_ids_.empty()) {
@@ -121,22 +122,27 @@ private:
             // 每个样本前注入系统提示词
             token_ids_.insert(token_ids_.end(), prompt_ids.begin(), prompt_ids.end());
             // UTF-8 解码：按码点 tokenize，每个字符一个 token
-            for (size_t i = 0; i < text.size(); ) {
-                unsigned char b = static_cast<unsigned char>(text[i]);
-                int32_t cp = 0;
-                int bytes = 0;
-                if (b < 0x80) { cp = b; bytes = 1; }
-                else if ((b & 0xE0) == 0xC0) { cp = b & 0x1F; bytes = 2; }
-                else if ((b & 0xF0) == 0xE0) { cp = b & 0x0F; bytes = 3; }
-                else if ((b & 0xF8) == 0xF0) { cp = b & 0x07; bytes = 4; }
-                else { bytes = 1; cp = b; } // invalid lead byte, treat as-is
-                for (int j = 1; j < bytes && (i + j) < text.size(); j++) {
-                    unsigned char cont = static_cast<unsigned char>(text[i + j]);
-                    if ((cont & 0xC0) != 0x80) { bytes = j; break; } // bad continuation
-                    cp = (cp << 6) | (cont & 0x3F);
+            if (tokenizer_) {
+                auto ids = tokenizer_->encode(text);
+                token_ids_.insert(token_ids_.end(), ids.begin(), ids.end());
+            } else {
+                for (size_t i = 0; i < text.size(); ) {
+                    unsigned char b = static_cast<unsigned char>(text[i]);
+                    int32_t cp = 0;
+                    int bytes = 0;
+                    if (b < 0x80) { cp = b; bytes = 1; }
+                    else if ((b & 0xE0) == 0xC0) { cp = b & 0x1F; bytes = 2; }
+                    else if ((b & 0xF0) == 0xE0) { cp = b & 0x0F; bytes = 3; }
+                    else if ((b & 0xF8) == 0xF0) { cp = b & 0x07; bytes = 4; }
+                    else { bytes = 1; cp = b; } // invalid lead byte, treat as-is
+                    for (int j = 1; j < bytes && (i + j) < text.size(); j++) {
+                        unsigned char cont = static_cast<unsigned char>(text[i + j]);
+                        if ((cont & 0xC0) != 0x80) { bytes = j; break; } // bad continuation
+                        cp = (cp << 6) | (cont & 0x3F);
+                    }
+                    i += bytes;
+                    token_ids_.push_back(cp);
                 }
-                i += bytes;
-                token_ids_.push_back(cp);
             }
             // 样本间加分隔
             token_ids_.push_back(0);  // null byte as separator
@@ -170,8 +176,8 @@ private:
             }
 
             // 普通文本关键
-            if (cJSON_IsString(e) && !result.empty()) result += "\n";
-            if (cJSON_IsString(e)) result += cJSON_GetStringValue(e);
+            if (cJSON_IsString(item) && !result.empty()) result += "\n";
+            if (cJSON_IsString(item)) result += cJSON_GetStringValue(item);
         }
 
         cJSON_Delete(j);

@@ -275,10 +275,8 @@ Java_com_pockettrainer_training_NativeTraining_nativeInitTokenizer(
             }
 
             BpeTokenizer* bpe = g_bpe_loaded ? &g_bpe_tokenizer : nullptr;
-            g_train_ds = std::make_unique<TextDataset>(_sl, system_prompt, bpe);
-            g_train_ds->load(dataset_path, _seed);
-            g_eval_ds  = std::make_unique<TextDataset>(_sl, system_prompt, bpe);
-            g_eval_ds->load(dataset_path, _seed + 1);
+            g_train_ds = std::make_unique<TextDataset>(dataset_path, _sl, system_prompt, _seed, bpe);
+            g_eval_ds  = std::make_unique<TextDataset>(dataset_path, _sl, system_prompt, _seed + 1, bpe);
 
             TrainerConfig cfg;
             cfg.num_epochs    = _epochs;
