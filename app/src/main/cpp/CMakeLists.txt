@@ -26,6 +26,7 @@ include_directories(
 add_library(pocket_trainer SHARED
     training_jni.cpp
     loRA_trainer.cpp
+    cJSON.c
 )
 
 target_link_libraries(pocket_trainer PRIVATE operators)

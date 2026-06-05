@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <cstdint>
+#include "cJSON.h"
 
 namespace pocket_trainer {
 
@@ -140,71 +141,93 @@ private:
         }
     }
 
-    static std::string extract_text_from_json_line(const std::string& line) {
-        // 简易 JSON 解析：找 text / instruction / output 字段
-        std::vector<std::string> parts;
-        for (const auto& key : {"\"text\"", "\"instruction\"", "\"input\"", "\"output\"", "\"content\""}) {
-            auto pos = line.find(key);
-            if (pos != std::string::npos) {
-                // 找到 key 后面的值
-                auto colon = line.find(':', pos + strlen(key));
-                if (colon == std::string::npos) continue;
-                auto val_start = line.find_first_not_of(" \t", colon + 1);
-                if (val_start == std::string::npos) continue;
+    static std::string extract_text_from_json_line(const std::string&line) {
+        cJSON* j = cJSON_Parse(line.c_str());
+        if (!j) return "";
 
-                if (line[val_start] == '"') {
-                    // 字符串值 — 找匹配的引号（跳过转义）
-                    val_start++;
-                    std::string val;
-                    for (size_t i = val_start; i < line.size(); i++) {
-                        if (line[i] == '\\' && i + 1 < line.size()) {
-                            char next = line[i + 1];
-                            switch (next) {
-                                case 'n': val += '\n'; break;
-                                case 't': val += '\t'; break;
-                                case '"': val += '"'; break;
-                                case '\\': val += '\\'; break;
-                                default: val += next;
-                            }
-                            i++;
-                        } else if (line[i] == '"') {
-                            break;
-                        } else {
-                            val += line[i];
-                        }
-                    }
-                    parts.push_back(val);
-                }
-            }
-        }
-
-        if (parts.empty()) return "";
-        // 拼接所有找到的字段
+        // 查扫默后的关键：text \"instruction" "input" "output" "content"
+        const char* keys[] = {"text", "instruction", "input", "output", "content", "messages"};
         std::string result;
-        for (size_t i = 0; i < parts.size(); i++) {
-            if (i > 0) result += "\n";
-            result += parts[i];
+        for (int k = 0; k < 6; k++) {
+            cJSON* item = cJSON_GetObjectItem(j, keys[k]);
+            if (!item) continue;
+
+            // 导入则主通当 "messages" 导入量
+            if (cJSON_IsArray(item) && strcmp(keys[k], "messages") == 0) {
+                cJSON* msg = item->child;
+                while (msg) {
+                    cJSON* content = cJSON_GetObjectItem(msg, "content");
+                    if (content && cJSON_IsString(content)) {
+                        if (!result.empty()) result += "\n";
+                        result += cJSON_GetStringValue(content);
+                    }
+                    msg = msg->next;
+                }
+                cJSON_Delete(j);
+                return result;
+            }
+
+            // 普通文本关键
+            if (cJSON_IsString(e) && !result.empty()) result += "\n";
+            if (cJSON_IsString(e)) result += cJSON_GetStringValue(e);
         }
+
+        cJSON_Delete(j);
         return result;
-    }
+    }}
 
     static std::vector<std::string> load_json_like(const std::string& path, bool line_by_line) {
         std::vector<std::string> texts;
-        std::ifstream file(path);
-        if (!file.is_open()) throw std::runtime_error("Cannot open: " + path);
 
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.empty()) continue;
-            auto text = extract_text_from_json_line(line);
-            if (!text.empty()) texts.push_back(text);
-            if (!line_by_line) break;  // .json 只读第一行（假设是数组的第一个元素）
+        if (line_by_line) {
+            // CSV/JSONL: read line by line
+            std::ifstream file(path);
+            if (!file.is_open()) throw std::runtime_error("Cannot open: " + path);
+            std::string line;
+            while (std::getline(file, line)) {
+                if (line.empty()) continue;
+                auto text = extract_text_from_json_line(line);
+                if (!text.empty()) texts.push_back(text);
+            }
+        } else {
+            // JSON: read entire file, parse array with cJSON
+            std::ifstream file(path);
+            if (!file.is_open()) throw std::runtime_error("Cannot open: " + path);
+            std::string content((std::istreambuf_iterator<char>(file)),
+                                std::istreambuf_iterator<char>());
+            cJSON* root = cJSON_Parse(content.c_str());
+            if (root) {
+                if (cJSON_IsArray(root)) {
+                    cJSON* item = root->child;
+                    while (item) {
+                        // Serialize each array element back to string, then extract text
+                        char* item_str = cJSON_PrintUnformatted(item);
+                        if (item_str) {
+                            auto t = extract_text_from_json_line(std::string(item_str));
+                            if (!t.empty()) texts.push_back(t);
+                            cJSON_free(item_str);
+                        }
+                        item = item->next;
+                    }
+                } else {
+                    // Single JSON object (not array)
+                    char* obj_str = cJSON_PrintUnformatted(root);
+                    if (obj_str) {
+                        auto t = extract_text_from_json_line(std::string(obj_str));
+                        if (!t.empty()) texts.push_back(t);
+                        cJSON_free(obj_str);
+                    }
+                }
+                cJSON_Delete(root);
+            } else {
+                // cJSON parse failed - fallback to plain text
+                if (!content.empty()) texts.push_back(content);
+            }
         }
 
-        // 如果 JSONL 方式没解析出东西，当纯文本读
+        // Last resort: if nothing parsed, read as plain text
         if (texts.empty()) {
-            file.clear();
-            file.seekg(0);
+            std::ifstream file(path);
             std::string all((std::istreambuf_iterator<char>(file)),
                              std::istreambuf_iterator<char>());
             if (!all.empty()) texts.push_back(all);
