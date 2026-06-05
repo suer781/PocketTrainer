@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <cstdint>
 #include "cJSON.h"
+#include "bpe_tokenizer.h"
 
 namespace pocket_trainer {
 
@@ -75,6 +76,7 @@ public:
 private:
     int seq_len_;
     std::string system_prompt_;
+    BpeTokenizer* tokenizer_;  // optional, not owned
     std::vector<int32_t> token_ids_;
 
     void load(const std::string& path) {
