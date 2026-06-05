@@ -95,7 +95,7 @@ class LoraManagerViewModel(application: Application) : AndroidViewModel(applicat
                     it.copy(
                         isProcessing = false,
                         statusMessage = if (loaded) "导入成功: $fileName" else "文件已保存但加载失败（需先加载基座模型）",
-                        statusIsError = !loaded && false  // 文件保存了就不算错误
+                        statusIsError = !loaded  // 文件保存了就不算错误
                     )
                 }
                 refreshList()

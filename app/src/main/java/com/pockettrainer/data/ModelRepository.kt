@@ -11,6 +11,7 @@ import java.net.URL
 class ModelRepository(private val context: Context) {
     private val modelsDir: File by lazy { File(context.filesDir, "models").also { it.mkdirs() } }
 
+    private fun sanitizeFilename(name: String): String = name.replace(Regex("[^a-zA-Z0-9._\x20-]"), "_").replace("..", "_")
     fun getDownloadedModels(): List<File> {
         return modelsDir.listFiles()?.filter { it.isDirectory }?.filter { dir ->
             dir.listFiles()?.any { it.name.endsWith(".safetensors") || it.name.endsWith(".gguf") } == true
@@ -23,7 +24,7 @@ class ModelRepository(private val context: Context) {
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val url = URL(urlStr)
-            val filename = url.path.substringAfterLast('/').ifBlank { "model.safetensors" }
+            val filename = sanitizeFilename(url.path.substringAfterLast("/")).ifBlank { "model.safetensors" }
             val modelDir = File(modelsDir, filename.removeSuffix(".safetensors").removeSuffix(".gguf")).also { it.mkdirs() }
             val outputFile = File(modelDir, filename)
 
@@ -54,7 +55,7 @@ class ModelRepository(private val context: Context) {
     suspend fun importFromUri(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
             val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "model.safetensors"
-            val modelDir = File(modelsDir, fileName.removeSuffix(".safetensors").removeSuffix(".gguf")).also { it.mkdirs() }
+            val fileName = sanitizeFilename(uri.lastPathSegment?.substringAfterLast("/") ?: "").ifBlank { "imported_model" }
             val outputFile = File(modelDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 outputFile.outputStream().use { output -> input.copyTo(output) }
@@ -70,9 +71,11 @@ class ModelRepository(private val context: Context) {
         // GGUF magic: 0x46475547 ("GGUF" in LE)
         if (header[0] == 0x47.toByte() && header[1] == 0x55.toByte() &&
             header[2] == 0x46.toByte() && header[3] == 0x47.toByte()) return true
-        // SafeTensors: first 8 bytes = header length (LE uint64, must be reasonable)
+        // SafeTensors: first 8 bytes = header length (LE uint64)
         val hlen = header.foldIndexed(0L) { i, acc, b -> acc or ((b.toLong() and 0xFF) shl (i * 8)) }
-        if (hlen in 1..1_000_000_000L) return true
-        return false
+        if (hlen < 2L || hlen > file.length() - 8) return false
+        // Header JSON must start with '{'
+        val firstJsonByte = file.inputStream().use { it.skip(8); it.read() }
+        return firstJsonByte == '{'.code
     }
 }
