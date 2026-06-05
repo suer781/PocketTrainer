@@ -93,6 +93,7 @@ data class TrainingUiState(
             TrainingState.RUNNING   -> "Epoch $currentEpoch/$totalEpochs | Step $currentStep/$totalSteps | Loss: %.4f | Best: %.4f".format(currentLoss, bestLoss)
             TrainingState.PAUSED    -> "已暂停 | Step $currentStep"
             TrainingState.COMPLETED -> "训练完成！Best Loss: %.4f".format(bestLoss)
+            TrainingState.STOPPED    -> "已停止"
             TrainingState.ERROR     -> "错误: $errorMessage"
         }
 
@@ -153,7 +154,7 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val modelsDir = File(context.getExternalFilesDir(null), "models").apply { mkdirs() }
-        val rawName = getFileNameFromUri(uri) ?: ("model_" + System.currentTimeMillis() + ".safetensors")
+        val rawName = uri.lastPathSegment?.substringAfterLast("/") ?: "model.bin" ?: ("model_" + System.currentTimeMillis() + ".safetensors")
         val fileName = rawName.substringAfterLast("/").replace("..", "_")
                 val outFile = File(modelsDir, fileName)
                 context.contentResolver.openInputStream(uri)?.use { input ->
@@ -218,7 +219,7 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
                             } else null
                         } else null
                     }
-                } catch (_: Exception) { null
+                } catch (_: Exception) { null }
             } else null
             
             // 如果 safetensors 读取失败，从文件名推断
@@ -263,7 +264,7 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val dataDir = File(context.getExternalFilesDir(null), "datasets").apply { mkdirs() }
-                val fileName = getFileNameFromUri(uri) ?: "dataset_${System.currentTimeMillis()}.txt"
+                val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "model.bin" ?: "dataset_${System.currentTimeMillis()}.txt"
                 val outFile = File(dataDir, fileName)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     outFile.outputStream().use { output -> input.copyTo(output) }
@@ -279,7 +280,7 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun computeStats(text: String): DatasetStats {
+    fun computeStats(text: String): DatasetStats {
         val charCount = text.length
         // 按空行分段算样本数
         val samples = text.split(Regex("\n\\s*\n")).filter { it.isNotBlank() }.size.coerceAtLeast(1)

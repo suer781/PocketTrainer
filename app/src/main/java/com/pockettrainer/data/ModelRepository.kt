@@ -55,12 +55,12 @@ class ModelRepository(private val context: Context) {
     suspend fun importFromUri(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
             val fileName = sanitizeFilename(uri.lastPathSegment?.substringAfterLast("/") ?: "").ifBlank { "imported_model" }
-            val outputFile = File(modelDir, fileName)
+            val outputFile = File(modelsDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 outputFile.outputStream().use { output -> input.copyTo(output) }
             } ?: throw Exception("Cannot open URI")
-            if (!validateModelFile(outputFile)) { outputFile.delete(); modelDir.delete(); throw Exception("Invalid model file format (expected GGUF or SafeTensors)") }
-            Result.success(modelDir.absolutePath)
+            if (!validateModelFile(outputFile)) { outputFile.delete(); modelsDir.delete(); throw Exception("Invalid model file format (expected GGUF or SafeTensors)") }
+            Result.success(modelsDir.absolutePath)
         } catch (e: Exception) { Result.failure(e) }
     }
 
