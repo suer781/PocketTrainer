@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.*
 import com.pockettrainer.ui.screens.*
+import com.pockettrainer.ui.LoraManagerScreen
 import com.pockettrainer.ui.theme.PocketTrainerTheme
 
 class MainActivity : ComponentActivity() {
@@ -34,13 +35,13 @@ fun MainApp() {
         BottomNavItem("models", "模型", Icons.Default.SmartToy),
         BottomNavItem("train", "训练", Icons.Default.PlayArrow),
         BottomNavItem("dataset", "数据集", Icons.Default.Storage),
-        BottomNavItem("cluster", "集群", Icons.Default.Hub),
+        BottomNavItem("lora", "LoRA", Icons.Default.Memory),
     )
 
     Scaffold(
         bottomBar = {
             NavigationBar {
-                bottomItems.forEach { item ->
+                bottomItems.forEach { item -&gt;
                     NavigationBarItem(
                         icon = { Icon(item.icon, contentDescription = item.label) },
                         label = { Text(item.label) },
@@ -58,13 +59,13 @@ fun MainApp() {
                 }
             }
         }
-    ) { padding ->
+    ) { padding -&gt;
         NavHost(navController, "home", Modifier.padding(padding)) {
             composable("home") { HomeScreen(navController) }
             composable("models") { ModelScreen(navController) }
             composable("train") { TrainScreen(navController) }
             composable("dataset") { DatasetScreen(navController) }
-            composable("cluster") { ClusterScreen(navController) }
+            composable("lora") { LoraManagerScreen() }
             composable("settings") { SettingsScreen(navController) }
         }
     }
