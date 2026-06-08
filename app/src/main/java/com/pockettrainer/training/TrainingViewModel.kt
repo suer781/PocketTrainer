@@ -14,7 +14,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-data class ModelInfo(
+data class ModelFileInfo(
     val path: String,
     val fileName: String,
     val fileSizeMb: Double
@@ -45,8 +45,8 @@ enum class DataSourceMode {
 }
 
 data class TrainingUiState(
-    val availableModels: List<ModelInfo> = emptyList(),
-    val selectedModel: ModelInfo? = null,
+    val availableModels: List<ModelFileInfo> = emptyList(),
+    val selectedModel: ModelFileInfo? = null,
     val modelMetadata: ModelMetadata? = null,
 
     // 数据源
@@ -141,12 +141,12 @@ class TrainingViewModel(application: Application) : AndroidViewModel(application
         val modelsDir = File(context.getExternalFilesDir(null), "models").apply { mkdirs() }
         val models = modelsDir.listFiles()
             ?.filter { it.extension == "safetensors" }
-            ?.map { ModelInfo(it.absolutePath, it.name, it.length() / (1024.0 * 1024.0)) }
+            ?.map { ModelFileInfo(it.absolutePath, it.name, it.length() / (1024.0 * 1024.0)) }
             ?: emptyList()
         _uiState.update { it.copy(availableModels = models) }
     }
 
-    fun selectModel(model: ModelInfo) {
+    fun selectModel(model: ModelFileInfo) {
         _uiState.update { it.copy(selectedModel = model, trainingState = TrainingState.IDLE, modelMetadata = null) }
     }
 

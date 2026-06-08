@@ -24,7 +24,7 @@
         </activity>
 
         <service
-            android:name=".training.TrainingService"
+            android:name=".training.TrainingForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 

@@ -331,7 +331,7 @@ private fun SectionHeader(step: Int, title: String, subtitle: String?) {
 }
 
 @Composable
-fun ModelCard(model: ModelInfo, isSelected: Boolean, onClick: () -> Unit) {
+fun ModelCard(model: ModelFileInfo, isSelected: Boolean, onClick: () -&gt; Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
