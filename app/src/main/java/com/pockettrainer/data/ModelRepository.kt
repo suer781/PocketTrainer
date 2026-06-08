@@ -9,12 +9,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class ModelRepository(private val context: Context) {
-    private val modelsDir: File by lazy { File(context.filesDir, "models").also { it.mkdirs() } }
+    // 使用与 TrainingViewModel 一致的目录结构（外部存储）
+    private val modelsDir: File by lazy {
+        File(context.getExternalFilesDir(null), "models").also { it.mkdirs() }
+    }
 
-    private fun sanitizeFilename(name: String): String = name.replace(Regex("[^a-zA-Z0-9._\x20-]"), "_").replace("..", "_")
+    private fun sanitizeFilename(name: String): String =
+        name.replace(Regex("[^a-zA-Z0-9._\\x20-]"), "_").replace("..", "_")
+
     fun getDownloadedModels(): List<File> {
-        return modelsDir.listFiles()?.filter { it.isDirectory }?.filter { dir ->
-            dir.listFiles()?.any { it.name.endsWith(".safetensors") || it.name.endsWith(".gguf") } == true
+        // 直接返回模型文件，不使用子目录
+        return modelsDir.listFiles()?.filter {
+            it.isFile && (it.name.endsWith(".safetensors") || it.name.endsWith(".gguf"))
         } ?: emptyList()
     }
 
@@ -25,8 +31,7 @@ class ModelRepository(private val context: Context) {
         try {
             val url = URL(urlStr)
             val filename = sanitizeFilename(url.path.substringAfterLast("/")).ifBlank { "model.safetensors" }
-            val modelDir = File(modelsDir, filename.removeSuffix(".safetensors").removeSuffix(".gguf")).also { it.mkdirs() }
-            val outputFile = File(modelDir, filename)
+            val outputFile = File(modelsDir, filename)
 
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 15_000
@@ -36,7 +41,7 @@ class ModelRepository(private val context: Context) {
 
             val totalSize = conn.contentLength.toLong()
             conn.inputStream.use { input ->
-                outputFile.outputStream().use { output ->
+                outputFile.outputStream.use { output ->
                     val buffer = ByteArray(8192)
                     var bytesRead = 0L
                     var read: Int
@@ -47,26 +52,32 @@ class ModelRepository(private val context: Context) {
                     }
                 }
             }
-            if (!validateModelFile(outputFile)) { outputFile.delete(); modelDir.delete(); throw Exception("Invalid model file format (expected GGUF or SafeTensors)") }
-            Result.success(modelDir.absolutePath)
+            if (!validateModelFile(outputFile)) {
+                outputFile.delete()
+                throw Exception("Invalid model file format (expected GGUF or SafeTensors)")
+            }
+            Result.success(outputFile.absolutePath)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun importFromUri(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val fileName = sanitizeFilename(uri.lastPathSegment?.substringAfterLast("/") ?: "").ifBlank { "imported_model" }
+            val fileName = sanitizeFilename(uri.lastPathSegment?.substringAfterLast("/") ?: "").ifBlank { "imported_model_${System.currentTimeMillis()}" }
             val outputFile = File(modelsDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->
-                outputFile.outputStream().use { output -> input.copyTo(output) }
+                outputFile.outputStream.use { output -> input.copyTo(output) }
             } ?: throw Exception("Cannot open URI")
-            if (!validateModelFile(outputFile)) { outputFile.delete(); modelsDir.delete(); throw Exception("Invalid model file format (expected GGUF or SafeTensors)") }
-            Result.success(modelsDir.absolutePath)
+            if (!validateModelFile(outputFile)) {
+                outputFile.delete()
+                throw Exception("Invalid model file format (expected GGUF or SafeTensors)")
+            }
+            Result.success(outputFile.absolutePath)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     private fun validateModelFile(file: File): Boolean {
         if (!file.exists() || file.length() < 8) return false
-        val header = file.inputStream().use { it.readNBytes(8) }
+        val header = file.inputStream.use { it.readNBytes(8) }
         // GGUF magic: 0x46475547 ("GGUF" in LE)
         if (header[0] == 0x47.toByte() && header[1] == 0x55.toByte() &&
             header[2] == 0x46.toByte() && header[3] == 0x47.toByte()) return true
@@ -74,7 +85,7 @@ class ModelRepository(private val context: Context) {
         val hlen = header.foldIndexed(0L) { i, acc, b -> acc or ((b.toLong() and 0xFF) shl (i * 8)) }
         if (hlen < 2L || hlen > file.length() - 8) return false
         // Header JSON must start with '{'
-        val firstJsonByte = file.inputStream().use { it.skip(8); it.read() }
+        val firstJsonByte = file.inputStream.use { it.skip(8); it.read() }
         return firstJsonByte == '{'.code
     }
 }

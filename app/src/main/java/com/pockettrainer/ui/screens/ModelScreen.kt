@@ -13,9 +13,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.pockettrainer.data.ModelInfo
 import com.pockettrainer.data.ModelRepository
 import kotlinx.coroutines.launch
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +27,7 @@ fun ModelScreen(navController: NavController) {
     val repo = remember { ModelRepository(context) }
     val scope = rememberCoroutineScope()
     var importedModels by remember { mutableStateOf(repo.getDownloadedModels()) }
+    val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
     // Import dialog state
     var showImportDialog by remember { mutableStateOf(false) }
@@ -66,6 +69,7 @@ fun ModelScreen(navController: NavController) {
                 0 -> RecommendedTab()
                 1 -> DownloadedTab(
                     models = importedModels,
+                    dateFormat = dateFormat,
                     isImporting = isImporting,
                     importProgress = importProgress,
                     importError = importError,
@@ -110,7 +114,7 @@ fun ModelScreen(navController: NavController) {
                         Spacer(Modifier.width(8.dp))
                         Text("从链接导入")
                     }
-                    Text("支持 HuggingFace、网盘直链、NAS 地址等",
+                    Text("支持 Hugging Face、网盘直链、NAS 地址等",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -177,9 +181,9 @@ fun ModelScreen(navController: NavController) {
 @Composable
 private fun RecommendedTab() {
     val models = listOf(
-        ModelInfo("Qwen2 0.5B", "Qwen/Qwen2-0.5B-Instruct-GGUF", "350MB", "最小，速度最快", 3),
-        ModelInfo("Qwen2 1.5B", "Qwen/Qwen2-1.5B-Instruct-GGUF", "1.0GB", "效果更好，推荐", 4),
-        ModelInfo("Gemma 2B", "google/gemma-2-2b-it-GGUF", "1.5GB", "Google 出品", 4),
+        Triple("Qwen2 0.5B", "Qwen/Qwen2-0.5B-Instruct-GGUF", "350MB"),
+        Triple("Qwen2 1.5B", "Qwen/Qwen2-1.5B-Instruct-GGUF", "1.0GB"),
+        Triple("Gemma 2B", "google/gemma-2-2b-it-GGUF", "1.5GB"),
     )
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -191,18 +195,14 @@ private fun RecommendedTab() {
             }
             Spacer(Modifier.height(8.dp))
         }
-        items(models) { model ->
+        items(models) { (name, repoId, size) ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(model.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                    Text(model.repoId, style = MaterialTheme.typography.bodySmall,
+                    Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text(repoId, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("📦 ${model.size}", style = MaterialTheme.typography.bodySmall)
-                        Text("⭐".repeat(model.rating), style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text(model.description, style = MaterialTheme.typography.bodySmall)
+                    Text("📦 $size", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -211,7 +211,8 @@ private fun RecommendedTab() {
 
 @Composable
 private fun DownloadedTab(
-    models: List<java.io.File>,
+    models: List<File>,
+    dateFormat: SimpleDateFormat,
     isImporting: Boolean,
     importProgress: Float,
     importError: String?,
@@ -243,8 +244,8 @@ private fun DownloadedTab(
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(model.name, fontWeight = FontWeight.Bold)
-                                val modelFile = model.listFiles()?.firstOrNull { it.name.endsWith(".gguf") || it.name.endsWith(".safetensors") }
-                                Text(modelFile?.name ?: "未知格式", style = MaterialTheme.typography.bodySmall,
+                                Text("%.1f MB · %s".format(model.length() / (1024.0 * 1024.0), dateFormat.format(Date(model.lastModified()))),
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Icon(Icons.Default.ChevronRight, null)
